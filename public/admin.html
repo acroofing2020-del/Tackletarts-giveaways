@@ -2,128 +2,95 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Dashboard</title>
+  <title>Admin - Tackle Tarts</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    h1 { color: #333; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #eee; }
-    .section { margin-bottom: 40px; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f4f9; }
+    h1 { text-align: center; }
+    .form-box, .comp-box {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      margin: 20px auto;
+      max-width: 600px;
+    }
+    input, textarea {
+      width: 95%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #004080;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: #0066cc; }
+    .comp { border-top: 1px solid #ccc; margin-top: 15px; padding-top: 15px; }
+    img { max-width: 100%; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h1>🎣 Admin Dashboard</h1>
+  <h1>Admin Panel</h1>
 
-  <div class="section">
-    <h2>Latest Tickets</h2>
-    <table id="ticketsTable">
-      <thead>
-        <tr>
-          <th>Email</th>
-          <th>Competition</th>
-          <th>Result</th>
-          <th>Ticket #</th>
-          <th>Time</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <button onclick="resetTickets()">Reset Tickets</button>
+  <div class="form-box">
+    <h2>Add New Competition</h2>
+    <input id="name" type="text" placeholder="Competition Name">
+    <textarea id="description" placeholder="Description"></textarea>
+    <input id="image" type="text" placeholder="Image URL">
+    <input id="maxTickets" type="number" placeholder="Max Tickets (default 200000)">
+    <button onclick="addComp()">Add Competition</button>
   </div>
 
-  <div class="section">
-    <h2>Competition Manager</h2>
-    <form onsubmit="addCompetition(event)">
-      <input type="text" id="name" placeholder="Name" required>
-      <input type="text" id="desc" placeholder="Description" required>
-      <input type="text" id="image" placeholder="Image URL (e.g. /images/rod.png)" required>
-      <button type="submit">Add Competition</button>
-    </form>
-
-    <h3>Existing Competitions</h3>
-    <table id="compsTable">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Active</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <div class="comp-box">
+    <h2>Existing Competitions</h2>
+    <div id="comps"></div>
   </div>
 
   <script>
-    async function loadTickets() {
-      const res = await fetch("/api/admin/tickets");
-      const data = await res.json();
-      const tbody = document.querySelector("#ticketsTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(t => {
-        tbody.innerHTML += `<tr>
-          <td>${t.email}</td>
-          <td>${t.competition}</td>
-          <td>${t.result}</td>
-          <td>${t.number}</td>
-          <td>${t.time}</td>
-        </tr>`;
+    async function loadComps() {
+      const res = await fetch("/api/competitions");
+      const comps = await res.json();
+      const container = document.getElementById("comps");
+      container.innerHTML = "";
+      comps.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "comp";
+        div.innerHTML = `
+          <h3>${c.name}</h3>
+          <p>${c.description}</p>
+          <img src="${c.image}" alt="${c.name}">
+          <p>🎟️ Max Tickets: ${c.maxTickets}</p>
+          <button onclick="deleteComp(${c.id})">Delete</button>
+        `;
+        container.appendChild(div);
       });
     }
 
-    async function resetTickets() {
-      if (!confirm("Reset all tickets?")) return;
-      await fetch("/api/admin/reset", { method: "POST" });
-      loadTickets();
-    }
-
-    async function loadCompetitions() {
-      const res = await fetch("/api/admin/competitions");
-      const data = await res.json();
-      const tbody = document.querySelector("#compsTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(c => {
-        tbody.innerHTML += `<tr>
-          <td>${c.id}</td>
-          <td>${c.name}</td>
-          <td>${c.description}</td>
-          <td>${c.active ? "Yes" : "No"}</td>
-          <td>
-            <button onclick="toggleComp(${c.id})">Toggle</button>
-            <button onclick="deleteComp(${c.id})">Delete</button>
-          </td>
-        </tr>`;
-      });
-    }
-
-    async function addCompetition(e) {
-      e.preventDefault();
+    async function addComp() {
       const name = document.getElementById("name").value;
-      const desc = document.getElementById("desc").value;
+      const description = document.getElementById("description").value;
       const image = document.getElementById("image").value;
-      await fetch("/api/admin/competitions", {
+      const maxTickets = document.getElementById("maxTickets").value;
+
+      await fetch("/api/competitions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: desc, image })
+        body: JSON.stringify({ name, description, image, maxTickets })
       });
-      loadCompetitions();
-    }
-
-    async function toggleComp(id) {
-      await fetch(`/api/admin/competitions/${id}/toggle`, { method: "POST" });
-      loadCompetitions();
+      loadComps();
     }
 
     async function deleteComp(id) {
-      if (!confirm("Delete this competition?")) return;
-      await fetch(`/api/admin/competitions/${id}`, { method: "DELETE" });
-      loadCompetitions();
+      await fetch("/api/competitions/" + id, { method: "DELETE" });
+      loadComps();
     }
 
-    loadTickets();
-    loadCompetitions();
+    loadComps();
   </script>
 </body>
 </html>
