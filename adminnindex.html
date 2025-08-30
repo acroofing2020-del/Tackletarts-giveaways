@@ -3,41 +3,91 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin • Tackle Tarts Giveaways</title>
+  <title>Admin — Tackle Tarts Giveaways</title>
   <link rel="stylesheet" href="/style.css">
   <style>
-    .admin{max-width:900px;margin:24px auto;padding:0 12px}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px 10px;border-bottom:1px solid #25324d;font-size:14px}
-    th{color:#9fb0cc;text-align:left}
-    .row-win{background:rgba(46,230,168,0.07)}
-    a.btn{display:inline-block;padding:8px 12px;border:1px solid #274164;border-radius:10px;text-decoration:none;color:#eaf2ff}
+    table {width:100%;border-collapse:collapse;margin-top:16px}
+    th, td {border:1px solid #25324d;padding:6px;text-align:left}
+    th {background:#162238}
+    .ok{color:var(--win);font-weight:600}
+    .bad{color:#e86b6b;font-weight:600}
+    .controls{margin-top:16px}
+    input{padding:6px;border-radius:6px;border:1px solid #2a3c60;background:#0e1728;color:var(--text)}
   </style>
 </head>
 <body>
-  <div class="admin">
-    <h1>Admin — Tackle Tarts Giveaways</h1>
-    <p><em>Tip:</em> This page is behind a login prompt (Basic Auth).</p>
-    <table id="tbl">
-      <thead><tr><th>ID</th><th>Created</th><th>Result</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <div class="wrap">
+    <header>
+      <h1>🎣 Admin Dashboard</h1>
+      <p class="sub">Manage raffle settings & view tickets</p>
+    </header>
+
+    <section class="card">
+      <h3>Set Win Probability</h3>
+      <div class="controls">
+        <label for="prob">Win probability (0.00–1.00):</label>
+        <input id="prob" type="number" step="0.01" min="0" max="1" value="0.05"/>
+        <button id="saveProb" class="btn primary">Save</button>
+      </div>
+      <p class="hint">Current server-side setting is used for all draws.</p>
+
+      <div class="controls">
+        <button id="resetTickets" class="btn">🗑️ Reset Tickets</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Recent Tickets</h3>
+      <table id="tickets">
+        <thead>
+          <tr><th>ID</th><th>Result</th><th>Time</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
   </div>
+
   <script>
-    async function load(){
-      const res = await fetch('/api/winners', { credentials: 'include' });
-      if(!res.ok){ alert('Could not load winners. Are you logged in?'); return; }
-      const rows = await res.json(); // array of { id, result, created_at }
-      const tb = document.querySelector('tbody');
-      tb.innerHTML = '';
-      rows.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.className = r.result === 'carp' ? 'row-win' : '';
-        tr.innerHTML = `<td>${r.id}</td><td>${new Date(r.created_at).toLocaleString()}</td><td>${r.result}</td>`;
-        tb.appendChild(tr);
-      });
+  async function loadTickets(){
+    const res = await fetch('/api/admin/tickets');
+    if(!res.ok){ alert("Auth required or server error"); return; }
+    const data = await res.json();
+    const tbody = document.querySelector('#tickets tbody');
+    tbody.innerHTML = "";
+    data.forEach(t=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = \`<td>\${t.id}</td><td class="\${t.result==='carp'?'ok':'bad'}">\${t.result}</td><td>\${t.time}</td>\`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function saveProb(){
+    const val = document.getElementById('prob').value;
+    const res = await fetch('/api/admin/setprob', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prob:parseFloat(val)})
+    });
+    if(res.ok){ alert("Win probability updated!"); }
+    else { alert("Error saving"); }
+  }
+
+  async function resetTickets(){
+    if(!confirm("Are you sure you want to clear ALL tickets?")) return;
+    const res = await fetch('/api/admin/reset', { method:'POST' });
+    if(res.ok){
+      alert("All tickets cleared!");
+      loadTickets();
+    } else {
+      alert("Error clearing tickets");
     }
-    load();
+  }
+
+  document.getElementById('saveProb').addEventListener('click', saveProb);
+  document.getElementById('resetTickets').addEventListener('click', resetTickets);
+
+  loadTickets();
+  setInterval(loadTickets, 5000); // refresh every 5s
   </script>
 </body>
 </html>
