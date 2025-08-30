@@ -7,7 +7,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-res.json({ ticketId: this.lastID, result });
+
 // --- Security ---
 app.use(helmet());
 app.use(express.json());
@@ -19,6 +19,7 @@ const db = new sqlite3.Database("raffle.db");
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user TEXT,
     result TEXT,
     time DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
@@ -34,16 +35,24 @@ app.use(express.static("public"));
 app.post("/api/draw", (req, res) => {
   const count = parseInt(req.query.count) || 1;
   const results = [];
+
   const stmt = db.prepare("INSERT INTO tickets (result) VALUES (?)");
 
+  let completed = 0;
   for (let i = 0; i < count; i++) {
     const result = Math.random() < winProb ? "carp" : "bream";
-    results.push(result);
-    stmt.run(result);
+    stmt.run(result, function (err) {
+      completed++;
+      if (!err) {
+        results.push({ ticketId: this.lastID, result });
+      }
+      if (completed === count) {
+        res.json({ results });
+      }
+    });
   }
-  stmt.finalize();
 
-  res.json({ results });
+  stmt.finalize();
 });
 
 // --- Admin auth ---
@@ -98,9 +107,4 @@ app.post("/api/admin/reset", basicAuth({
 // --- Start server ---
 app.listen(PORT, () => {
   console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
-});db.run(`CREATE TABLE IF NOT EXISTS tickets (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user TEXT,
-  result TEXT,
-  time DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+});
