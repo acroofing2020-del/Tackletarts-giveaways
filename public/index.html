@@ -2,15 +2,135 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Tackle Tarts Giveaways</title>
+  <title>Admin Dashboard - Tackle Tarts</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #2a7ae2; color: white; }
+    button { margin: 5px; padding: 6px 12px; }
+  </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>🎣 Welcome to Tackle Tarts Giveaways!</h1>
-    <p>Win instant prizes with our raffles. Sign up and start fishing for Carp!</p>
-    <a href="signup.html" class="btn">Sign Up</a>
-    <a href="login.html" class="btn">Login</a>
+    <h1>🎣 Admin Dashboard</h1>
+
+    <!-- Ticket Viewer -->
+    <section>
+      <h2>Latest Tickets</h2>
+      <button onclick="resetTickets()">Reset Tickets</button>
+      <table id="tickets">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Competition</th>
+            <th>Result</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Competition Manager -->
+    <section>
+      <h2>Manage Competitions</h2>
+      <form id="compForm">
+        <input type="text" id="cName" placeholder="Name" required>
+        <input type="text" id="cDesc" placeholder="Description" required>
+        <input type="text" id="cImg" placeholder="Image URL" required>
+        <button type="submit">Add Competition</button>
+      </form>
+
+      <table id="comps">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Image</th>
+            <th>Active</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
   </div>
+
+  <script>
+    async function loadTickets() {
+      const res = await fetch("/api/admin/tickets");
+      const data = await res.json();
+      const tbody = document.querySelector("#tickets tbody");
+      tbody.innerHTML = "";
+      data.forEach(t => {
+        const row = `<tr>
+          <td>${t.id}</td>
+          <td>${t.email || "Guest"}</td>
+          <td>${t.competition}</td>
+          <td>${t.result}</td>
+          <td>${t.time}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    async function resetTickets() {
+      if (!confirm("Delete all tickets?")) return;
+      await fetch("/api/admin/reset", { method: "POST" });
+      loadTickets();
+    }
+
+    async function loadCompetitions() {
+      const res = await fetch("/api/admin/competitions");
+      const comps = await res.json();
+      const tbody = document.querySelector("#comps tbody");
+      tbody.innerHTML = "";
+      comps.forEach(c => {
+        const row = `<tr>
+          <td>${c.id}</td>
+          <td>${c.name}</td>
+          <td>${c.description}</td>
+          <td><img src="${c.image}" width="80"></td>
+          <td>${c.active ? "Yes" : "No"}</td>
+          <td>
+            <button onclick="toggleComp(${c.id})">Toggle</button>
+            <button onclick="deleteComp(${c.id})">Delete</button>
+          </td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    document.getElementById("compForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = document.getElementById("cName").value;
+      const desc = document.getElementById("cDesc").value;
+      const img = document.getElementById("cImg").value;
+      await fetch("/api/admin/competitions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description: desc, image: img })
+      });
+      e.target.reset();
+      loadCompetitions();
+    });
+
+    async function toggleComp(id) {
+      await fetch(`/api/admin/competitions/${id}/toggle`, { method: "POST" });
+      loadCompetitions();
+    }
+
+    async function deleteComp(id) {
+      if (!confirm("Delete this competition?")) return;
+      await fetch(`/api/admin/competitions/${id}`, { method: "DELETE" });
+      loadCompetitions();
+    }
+
+    loadTickets();
+    loadCompetitions();
+  </script>
 </body>
 </html>
