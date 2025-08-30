@@ -1,162 +1,65 @@
-Perfect 👍 we’ll do it step by step so it’s easy. You’ll end up with a GitHub repo that Render can deploy.
+const $ = (s) => document.querySelector(s);
 
+function carpSVG(){
+  return `
+<svg viewBox="0 0 200 120" aria-label="Carp winner">
+  <defs><linearGradient id="g2" x1="0" x2="1"><stop offset="0%" stop-color="#ffd166"/><stop offset="100%" stop-color="#f6a700"/></linearGradient></defs>
+  <ellipse cx="100" cy="60" rx="75" ry="38" fill="url(#g2)" stroke="#b37a00" stroke-width="2"/>
+  <polygon points="160,60 192,36 192,84" fill="#f6a700" stroke="#b37a00" stroke-width="2"/>
+  <circle cx="85" cy="55" r="6" fill="#4b3200"/>
+</svg>`;
+}
 
----
+function breamSVG(){
+  return `
+<svg viewBox="0 0 200 120" aria-label="Bream ticket">
+  <defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0%" stop-color="#7aa8d4"/><stop offset="100%" stop-color="#496c9a"/></linearGradient></defs>
+  <ellipse cx="100" cy="60" rx="70" ry="35" fill="url(#g1)" stroke="#355279" stroke-width="2"/>
+  <polygon points="160,60 190,40 190,80" fill="#5d80ad" stroke="#355279" stroke-width="2"/>
+  <circle cx="80" cy="55" r="6" fill="#0b1220"/>
+</svg>`;
+}
 
-📝 Step 1 — Create Your Repo
+function ticketEl(kind){
+  const el = document.createElement('div');
+  el.className = 'ticket' + (kind === 'carp' ? ' win' : '');
+  const id = `TT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+  el.innerHTML = `
+    <div class="id">${id}</div>
+    <div class="fish">${kind === 'carp' ? carpSVG() : breamSVG()}</div>
+    ${kind === 'carp' ? '<div class="win-badge">WINNER</div>' : ''}
+  `;
+  return el;
+}
 
-1. Go to github.com → sign in.
+async function draw(n){
+  const res = await fetch('/api/draw?count=' + n, { method:'POST' });
+  if(!res.ok){ alert('Server error: ' + res.status); return; }
+  const data = await res.json(); // { results: ['bream' | 'carp', ...] }
+  const wrap = $('#tickets');
+  data.results.forEach(kind => {
+    const el = ticketEl(kind);
+    wrap.prepend(el);
+    if(kind === 'carp') confetti();
+  });
+}
 
-
-2. Click the + (top right) → New repository.
-
-
-3. Name it: tackle-tarts-giveaways
-
-
-4. Leave it Public → click Create repository.
-
-
-
-Now you should see an “Add file” button.
-
-
----
-
-📝 Step 2 — Add the Main Files
-
-We’ll start with the two most important files:
-
-
----
-
-📄 File 1: package.json
-
-On GitHub → “Add file” → “Create new file”.
-
-File name: package.json
-
-Paste this content:
-
-
-{
-  "name": "tackle-tarts-giveaways",
-  "version": "1.0.0",
-  "description": "Tackle Tarts Giveaways Raffle App",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "sqlite3": "^5.1.7",
-    "helmet": "^7.1.0",
-    "express-basic-auth": "^1.2.1",
-    "express-rate-limit": "^7.1.5"
+function confetti(){
+  const c = document.getElementById('confetti');
+  const count = 80;
+  for(let i=0;i<count;i++){
+    const p = document.createElement('div');
+    p.className = 'piece';
+    p.style.left = (Math.random()*100)+'vw';
+    p.style.top = (-10 - Math.random()*40)+'vh';
+    p.style.background = ['#62d1ff','#2ee6a8','#ffd166','#ffffff'][i%4];
+    p.style.animationDuration = (1 + Math.random()*1.5)+'s';
+    c.appendChild(p);
+    setTimeout(()=>p.remove(), 2500);
   }
 }
 
-Scroll down → click Commit new file ✅
-
-
----
-
-📄 File 2: server.js
-
-Click Add file → Create new file again.
-
-File name: server.js
-
-Paste this:
-
-
-const express = require("express");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const basicAuth = require("express-basic-auth");
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
-
-// Env variables
-const PORT = process.env.PORT || 8080;
-const WIN_PROB = parseFloat(process.env.WIN_PROB || "0.05");
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "change-me";
-
-// Setup app
-const app = express();
-app.use(helmet());
-app.use(express.json());
-app.use(express.static("public"));
-
-// Rate limiter (100 requests / 15 minutes per IP)
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-// Database setup
-const db = new sqlite3.Database("data.db");
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS tickets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
-});
-
-// Serve main page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// API: draw tickets
-app.post("/api/draw", (req, res) => {
-  let draws = parseInt(req.query.count || "1");
-  if (draws > 10) draws = 10;
-
-  const results = [];
-  for (let i = 0; i < draws; i++) {
-    const isWin = Math.random() < WIN_PROB;
-    const ticket = isWin ? "carp" : "bream";
-    results.push(ticket);
-
-    db.run("INSERT INTO tickets (result) VALUES (?)", [ticket]);
-  }
-
-  res.json({ results });
-});
-
-// Admin area
-app.use(
-  "/admin",
-  basicAuth({
-    users: { [ADMIN_USER]: ADMIN_PASS },
-    challenge: true
-  }),
-  express.static("admin")
-);
-
-// API: get winners
-app.get("/api/winners", (req, res) => {
-  db.all(
-    "SELECT * FROM tickets WHERE result='carp' ORDER BY created_at DESC",
-    [],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    }
-  );
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
-});
-
-Scroll down → Commit new file ✅
-
-
----
-
-👉 At this point, you’ve got the backend ready. Next, we’ll add the frontend files (/public/index.html, /public/style.css, and /admin/index.html).
-
-Do you want me to paste the raffle page (index.html) next?
-
+$('#draw1').addEventListener('click', ()=>draw(1));
+$('#draw5').addEventListener('click', ()=>draw(5));
+$('#draw10').addEventListener('click', ()=>draw(10));
+$('#clear').addEventListener('click', ()=> $('#tickets').innerHTML = '');
