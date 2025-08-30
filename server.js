@@ -83,6 +83,7 @@ app.post("/api/admin/setprob", basicAuth({
   }
   res.status(400).json({ error: "Invalid probability" });
 });
+
 // --- API: Admin reset tickets ---
 app.post("/api/admin/reset", basicAuth({
   users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
@@ -93,6 +94,7 @@ app.post("/api/admin/reset", basicAuth({
     res.json({ ok: true });
   });
 });
+
 // --- Start server ---
 app.listen(PORT, () => {
   console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
