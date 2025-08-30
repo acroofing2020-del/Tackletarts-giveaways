@@ -3,41 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tackle Tarts Giveaways — Instant Win</title>
-  <meta name="description" content="Instant-win raffle. Bream tickets, Carp = win (5% default odds).">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎣</text></svg>">
+  <title>Tackle Tarts Giveaways</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="wrap">
     <header>
       <h1>🎣 Tackle Tarts Giveaways</h1>
-      <p class="sub">Bream tickets • Carp = WIN • Odds set on server</p>
+      <p class="sub">Try your luck — catch a carp to win instantly!</p>
     </header>
 
-    <section class="controls card">
-      <h3>Draw Tickets</h3>
-      <div class="btns">
-        <button id="draw1" class="btn primary">🎟️ Draw 1</button>
-        <button id="draw5" class="btn">🎟️×5</button>
-        <button id="draw10" class="btn">🎟️×10</button>
-        <button id="clear" class="btn subtle">Clear</button>
-      </div>
-      <p class="hint">Results are decided on the server and saved in a database.</p>
-    </section>
-
     <section class="card">
-      <h3>Recent Tickets</h3>
-      <div id="tickets" class="tickets" aria-live="polite" aria-relevant="additions"></div>
-    </section>
+      <h2>🎟️ Get Your Ticket</h2>
+      <button id="drawBtn" class="btn primary">Draw Ticket</button>
+      <button id="draw10Btn" class="btn">Draw 10 Tickets</button>
 
-    <footer>
-      <p>Demo only — check your local raffle rules before running public giveaways.</p>
-      <p><a href="/admin">Admin</a> (requires login)</p>
-    </footer>
+      <div id="results"></div>
+    </section>
   </div>
 
-  <div id="confetti" class="confetti" aria-hidden="true"></div>
   <script src="/app.js"></script>
 </body>
 </html>
