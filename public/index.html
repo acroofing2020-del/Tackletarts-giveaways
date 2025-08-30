@@ -3,25 +3,109 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tackle Tarts Giveaways</title>
+  <title>Admin Dashboard - Tackle Tarts Giveaways</title>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #334155;
+      text-align: left;
+    }
+    th {
+      background: #1c2942;
+    }
+    tr:hover {
+      background: #2d3b56;
+    }
+  </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>🎣 Tackle Tarts Giveaways</h1>
-      <p class="sub">Try your luck — catch a carp to win instantly!</p>
+      <h1>🎣 Admin Dashboard</h1>
+      <p class="sub">Manage Tackle Tarts Giveaways</p>
     </header>
 
     <section class="card">
-      <h2>🎟️ Get Your Ticket</h2>
-      <button id="drawBtn" class="btn primary">Draw Ticket</button>
-      <button id="draw10Btn" class="btn">Draw 10 Tickets</button>
+      <h2>🎟️ Recent Tickets</h2>
+      <table id="ticketsTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Result</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
-      <div id="results"></div>
+    <section class="card">
+      <h2>⚙️ Controls</h2>
+      <div class="controls">
+        <label for="probInput">Win Probability (0–1):</label>
+        <input type="number" id="probInput" step="0.01" min="0" max="1" />
+        <button id="setProb" class="btn primary">Update</button>
+      </div>
+      <p class="hint">Example: 0.05 = 5% chance of winning</p>
+
+      <div class="controls" style="margin-top:10px;">
+        <button id="resetTickets" class="btn">🗑️ Reset Tickets</button>
+      </div>
     </section>
   </div>
 
-  <script src="/app.js"></script>
+  <script>
+    async function loadTickets(){
+      const res = await fetch('/api/admin/tickets');
+      const tickets = await res.json();
+      const tbody = document.querySelector("#ticketsTable tbody");
+      tbody.innerHTML = "";
+      tickets.forEach(t => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${t.id}</td>
+          <td>${t.result === "carp" ? "🐟 Carp (WIN)" : "🐟 Bream"}</td>
+          <td>${new Date(t.time).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function setProb(){
+      const val = parseFloat(document.getElementById("probInput").value);
+      if(isNaN(val) || val < 0 || val > 1) {
+        return alert("Enter a number between 0 and 1");
+      }
+      await fetch('/api/admin/setprob', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({prob: val})
+      });
+      alert("Win probability updated!");
+    }
+
+    async function resetTickets(){
+      if(!confirm("Are you sure you want to clear ALL tickets?")) return;
+      const res = await fetch('/api/admin/reset', { method:'POST' });
+      if(res.ok){
+        alert("All tickets cleared!");
+        loadTickets();
+      } else {
+        alert("Error clearing tickets");
+      }
+    }
+
+    document.getElementById("setProb").addEventListener("click", setProb);
+    document.getElementById("resetTickets").addEventListener("click", resetTickets);
+
+    // Load tickets when page opens
+    loadTickets();
+  </script>
 </body>
 </html>
