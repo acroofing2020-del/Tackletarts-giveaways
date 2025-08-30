@@ -2,95 +2,72 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin - Tackle Tarts Giveaways</title>
+  <title>Admin - Tackle Tarts</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f5f5f5;
+      background: linear-gradient(120deg, #d4fc79, #96e6a1);
       margin: 0;
       padding: 20px;
     }
     h1 {
-      color: #004080;
       text-align: center;
+      color: #004080;
     }
-    .form-box, .table-box {
+    .form-box, .comp-list {
       background: #fff;
       padding: 20px;
+      margin: 20px auto;
       border-radius: 12px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      margin-bottom: 30px;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-      font-weight: bold;
+      width: 90%;
+      max-width: 600px;
     }
     input, textarea {
       width: 95%;
-      padding: 8px;
-      margin-top: 5px;
+      padding: 10px;
+      margin: 10px 0;
       border: 1px solid #ccc;
       border-radius: 8px;
     }
     button {
-      margin-top: 15px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
+      padding: 12px 20px;
       background: #004080;
       color: white;
-      font-size: 1em;
+      border: none;
+      border-radius: 8px;
       cursor: pointer;
     }
-    button:hover { background: #0066cc; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    button:hover {
+      background: #0066cc;
     }
-    th, td {
-      padding: 10px;
+    .comp-item {
       border-bottom: 1px solid #ddd;
-      text-align: left;
+      padding: 10px 0;
     }
-    th { background: #004080; color: white; }
-    .end-btn {
-      background: crimson;
-      color: white;
+    .comp-item img {
+      max-width: 100px;
+      border-radius: 8px;
+      margin-right: 10px;
+      vertical-align: middle;
     }
-    .end-btn:hover { background: darkred; }
   </style>
 </head>
 <body>
-  <h1>🎣 Admin Panel - Tackle Tarts Giveaways</h1>
+  <h1>🎣 Admin Panel</h1>
 
   <div class="form-box">
-    <h2>Create New Competition</h2>
-    <label>Name</label>
-    <input id="name" type="text" placeholder="Competition name">
-    <label>Description</label>
-    <textarea id="description" placeholder="Short description"></textarea>
-    <label>Image URL</label>
-    <input id="image" type="text" placeholder="https://...">
-    <label>Max Tickets</label>
-    <input id="maxTickets" type="number" value="200000">
+    <h2>Create Competition</h2>
+    <input id="name" placeholder="Competition Name">
+    <textarea id="description" placeholder="Description"></textarea>
+    <input id="image" placeholder="Image URL">
+    <input id="maxTickets" type="number" placeholder="Max Tickets (e.g. 200000)">
     <button onclick="createCompetition()">Create</button>
   </div>
 
-  <div class="table-box">
-    <h2>Active Competitions</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Tickets Sold</th>
-          <th>Max Tickets</th>
-          <th>End Draw</th>
-        </tr>
-      </thead>
-      <tbody id="compTable"></tbody>
-    </table>
+  <div class="comp-list">
+    <h2>All Competitions</h2>
+    <div id="competitions"></div>
   </div>
 
   <script>
@@ -98,9 +75,9 @@
       const name = document.getElementById("name").value;
       const description = document.getElementById("description").value;
       const image = document.getElementById("image").value;
-      const maxTickets = document.getElementById("maxTickets").value;
+      const maxTickets = parseInt(document.getElementById("maxTickets").value);
 
-      const res = await fetch("/api/admin/competitions", {
+      const res = await fetch("/api/admin/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description, image, maxTickets })
@@ -110,43 +87,26 @@
         alert("✅ Competition created!");
         loadCompetitions();
       } else {
-        alert("❌ Error creating competition");
+        alert("❌ Failed to create competition");
       }
     }
 
     async function loadCompetitions() {
       const res = await fetch("/api/competitions");
       const comps = await res.json();
-      const table = document.getElementById("compTable");
-      table.innerHTML = "";
-
+      const container = document.getElementById("competitions");
+      container.innerHTML = "";
       comps.forEach(c => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${c.id}</td>
-          <td>${c.name}</td>
-          <td>${c.soldCount}</td>
-          <td>${c.maxTickets}</td>
-          <td>
-            ${c.hasEndWinner 
-              ? `Winner: Ticket #${c.endWinner?.number}` 
-              : `<button class="end-btn" onclick="endDraw(${c.id})">End Draw</button>`
-            }
-          </td>
+        const div = document.createElement("div");
+        div.className = "comp-item";
+        div.innerHTML = `
+          <img src="${c.image}" alt="comp">
+          <strong>${c.name}</strong><br>
+          ${c.description}<br>
+          🎟️ ${c.soldCount}/${c.maxTickets} tickets sold
         `;
-        table.appendChild(row);
+        container.appendChild(div);
       });
-    }
-
-    async function endDraw(id) {
-      const res = await fetch("/api/admin/end-draw/" + id, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        alert("🎉 End Draw Winner: Ticket #" + data.winner.number);
-        loadCompetitions();
-      } else {
-        alert("❌ Error ending draw");
-      }
     }
 
     loadCompetitions();
