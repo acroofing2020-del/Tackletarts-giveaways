@@ -1,85 +1,90 @@
 const express = require("express");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const basicAuth = require("express-basic-auth");
 const sqlite3 = require("sqlite3").verbose();
+const helmet = require("helmet");
+const basicAuth = require("express-basic-auth");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 
-// Env variables
-const PORT = process.env.PORT || 8080;
-const WIN_PROB = parseFloat(process.env.WIN_PROB || "0.05");
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "change-me";
-
-// Setup app
 const app = express();
+const PORT = process.env.PORT || 10000;
+
+// --- Security ---
 app.use(helmet());
 app.use(express.json());
-app.use(express.static("public"));
-const path = require("path");
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 100 });
+app.use(limiter);
 
-// Serve admin dashboard after login
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
-// Rate limiter (100 requests / 15 minutes per IP)
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-// Database setup
-const db = new sqlite3.Database("data.db");
+// --- Database setup ---
+const db = new sqlite3.Database("raffle.db");
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     result TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    time DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 });
 
-// Serve main page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+// --- Win probability (default 5%) ---
+let winProb = process.env.WIN_PROB ? parseFloat(process.env.WIN_PROB) : 0.05;
 
-// API: draw tickets
+// --- Static files ---
+app.use(express.static("public"));
+
+// --- API: Draw tickets ---
 app.post("/api/draw", (req, res) => {
-  let draws = parseInt(req.query.count || "1");
-  if (draws > 10) draws = 10;
-
+  const count = parseInt(req.query.count) || 1;
   const results = [];
-  for (let i = 0; i < draws; i++) {
-    const isWin = Math.random() < WIN_PROB;
-    const ticket = isWin ? "carp" : "bream";
-    results.push(ticket);
+  const stmt = db.prepare("INSERT INTO tickets (result) VALUES (?)");
 
-    db.run("INSERT INTO tickets (result) VALUES (?)", [ticket]);
+  for (let i = 0; i < count; i++) {
+    const result = Math.random() < winProb ? "carp" : "bream";
+    results.push(result);
+    stmt.run(result);
   }
+  stmt.finalize();
 
   res.json({ results });
 });
 
-// Admin area
+// --- Admin auth ---
 app.use(
   "/admin",
   basicAuth({
-    users: { [ADMIN_USER]: ADMIN_PASS },
-    challenge: true
-  }),
-  express.static("admin")
+    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+    challenge: true,
+  })
 );
 
-// API: get winners
-app.get("/api/winners", (req, res) => {
-  db.all(
-    "SELECT * FROM tickets WHERE result='carp' ORDER BY created_at DESC",
-    [],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    }
-  );
+// --- Admin dashboard page ---
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-// Start server
+// --- API: Admin list tickets ---
+app.get("/api/admin/tickets", basicAuth({
+  users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+  challenge: true,
+}), (req, res) => {
+  db.all("SELECT * FROM tickets ORDER BY time DESC LIMIT 50", (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// --- API: Admin set probability ---
+app.post("/api/admin/setprob", basicAuth({
+  users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+  challenge: true,
+}), (req, res) => {
+  const newProb = req.body.prob;
+  if (typeof newProb === "number" && newProb >= 0 && newProb <= 1) {
+    winProb = newProb;
+    return res.json({ ok: true, winProb });
+  }
+  res.status(400).json({ error: "Invalid probability" });
+});
+
+// --- Start server ---
 app.listen(PORT, () => {
-  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
+  console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
 });
