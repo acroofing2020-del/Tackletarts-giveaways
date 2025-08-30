@@ -1,210 +1,156 @@
+
 const express = require("express");
 const session = require("express-session");
-const bcrypt = require("bcryptjs"); // no native build needed
+const bodyParser = require("body-parser");
+const bcrypt = require("bcryptjs"); // lightweight bcrypt alternative
 const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ===== App middleware =====
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware
+app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "secret-key",
-    resave: false,
-    saveUninitialized: false,
-  })
-);
+app.use(session({
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false
+}));
 
-// ===== In-memory data (clears on restart) =====
-let users = [];        // { id, email, passwordHash }
-let competitions = []; // { id, name, description, image, maxTickets, soldTickets[], instantWins[], endWinner }
-let tickets = [];      // { id, userId, compId, number, result }
+// In-memory storage (replace with DB later)
+let users = [];
+let competitions = [];
+let tickets = [];
+let compCounter = 1;
+let ticketCounter = 1;
 
-// ===== Helpers =====
-function requireLogin(req, res, next) {
-  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
-  next();
-}
+// -------- AUTH ROUTES --------
 
-function requireAdmin(req, res, next) {
-  const key = req.header("x-admin-key") || req.query.key || req.body.key;
-  const ADMIN_KEY = process.env.ADMIN_KEY || "changeme";
-  if (key !== ADMIN_KEY) return res.status(403).json({ error: "Forbidden (bad admin key)" });
-  next();
-}
-
-function pickUniqueRandomTicket(max, takenSet) {
-  // Try randoms until we hit a free number (works fine until very high sell-through)
-  let n;
-  do {
-    n = Math.floor(Math.random() * max) + 1; // 1..max
-  } while (takenSet.has(n));
-  return n;
-}
-
-// ===== Auth =====
+// Signup
 app.post("/api/signup", async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
-
-  if (users.find(u => u.email.toLowerCase() === String(email).toLowerCase())) {
+  const { email, password } = req.body;
+  if (users.find(u => u.email === email)) {
     return res.status(400).json({ error: "Email already exists" });
   }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = { id: users.length + 1, email, passwordHash };
+  const hashed = await bcrypt.hash(password, 10);
+  const user = { id: users.length + 1, email, password: hashed };
   users.push(user);
-  req.session.userId = user.id;
-  res.json({ message: "User created", user: { id: user.id, email: user.email } });
+  req.session.user = user;
+  res.json({ message: "Signup successful", user: { id: user.id, email: user.email } });
 });
 
+// Login
 app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body || {};
-  const user = users.find(u => u.email.toLowerCase() === String(email).toLowerCase());
-  if (!user) return res.status(400).json({ error: "Invalid credentials" });
+  const { email, password } = req.body;
+  const user = users.find(u => u.email === email);
+  if (!user) return res.status(400).json({ error: "Invalid email" });
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.status(400).json({ error: "Wrong password" });
 
-  req.session.userId = user.id;
+  req.session.user = user;
   res.json({ message: "Login successful" });
 });
 
+// Logout
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => res.json({ message: "Logged out" }));
 });
 
-// ===== Competitions (public) =====
-app.get("/api/competitions", (req, res) => {
-  // Return safe public details
-  const list = competitions.map(c => ({
-    id: c.id,
-    name: c.name,
-    description: c.description,
-    image: c.image,
-    maxTickets: c.maxTickets,
-    soldCount: c.soldTickets.length,
-    hasEndWinner: !!c.endWinner,
-  }));
-  res.json(list);
-});
+// -------- ADMIN ROUTES --------
 
-// ===== Enter competition (user) =====
-app.post("/api/enter/:compId", requireLogin, (req, res) => {
-  const compId = parseInt(req.params.compId, 10);
-  const comp = competitions.find(c => c.id === compId);
-  if (!comp) return res.status(404).json({ error: "Competition not found" });
-
-  if (comp.soldTickets.length >= comp.maxTickets) {
-    return res.status(400).json({ error: "All tickets sold out" });
-  }
-
-  // For uniqueness, build a Set of taken numbers
-  const taken = new Set(comp.soldTickets);
-  const ticketNum = pickUniqueRandomTicket(comp.maxTickets, taken);
-
-  comp.soldTickets.push(ticketNum);
-
-  const isInstant = comp.instantWins.includes(ticketNum);
-  const result = isInstant ? "Carp (Instant Win)" : "Bream";
-
-  const ticket = {
-    id: tickets.length + 1,
-    userId: req.session.userId,
-    compId,
-    number: ticketNum,
-    result,
-  };
-  tickets.push(ticket);
-
-  res.json({ message: "Ticket entered", ticket });
-});
-
-// ===== User dashboard =====
-app.get("/api/my-tickets", requireLogin, (req, res) => {
-  const userTickets = tickets
-    .filter(t => t.userId === req.session.userId)
-    .map(t => {
-      const comp = competitions.find(c => c.id === t.compId);
-      return {
-        number: t.number,
-        result: t.result,
-        compName: comp ? comp.name : "Unknown",
-      };
-    });
-  res.json(userTickets);
-});
-
-// ===== Admin: create competition with instant wins =====
-// Use x-admin-key header (or ?key=...) matching process.env.ADMIN_KEY
-app.post("/api/admin/competitions", requireAdmin, (req, res) => {
-  const { name, description, image, maxTickets } = req.body || {};
-  if (!name || !description || !image) {
-    return res.status(400).json({ error: "name, description, image are required" });
-  }
-
-  const totalTickets = parseInt(maxTickets, 10) > 0 ? parseInt(maxTickets, 10) : 200000;
-
-  // Default: EXACTLY 100 instant wins
-  const INSTANT_WIN_COUNT = Math.min(100, totalTickets);
-
-  // Pre-generate unique instant-win ticket numbers
-  const instant = new Set();
-  while (instant.size < INSTANT_WIN_COUNT) {
-    instant.add(Math.floor(Math.random() * totalTickets) + 1);
-  }
-
+// Create competition
+app.post("/api/admin/competitions", (req, res) => {
+  const { name, description, image, maxTickets } = req.body;
   const comp = {
-    id: competitions.length + 1,
+    id: compCounter++,
     name,
     description,
     image,
-    maxTickets: totalTickets,
-    soldTickets: [],             // ticket numbers sold
-    instantWins: Array.from(instant).sort((a, b) => a - b),
-    endWinner: null,             // populated after end-draw
+    maxTickets: parseInt(maxTickets) || 200000,
+    soldCount: 0,
+    instantWins: [],
+    hasEndWinner: false,
+    endWinner: null
   };
 
+  // Pre-generate 100 instant win ticket numbers
+  const winSet = new Set();
+  while (winSet.size < 100) {
+    winSet.add(Math.floor(Math.random() * comp.maxTickets) + 1);
+  }
+  comp.instantWins = [...winSet];
+
   competitions.push(comp);
-  res.json({ message: "Competition created", compId: comp.id });
+  res.json({ message: "Competition created", comp });
 });
 
-// ===== Admin: end-of-draw winner =====
-app.post("/api/admin/end-draw/:compId", requireAdmin, (req, res) => {
-  const compId = parseInt(req.params.compId, 10);
-  const comp = competitions.find(c => c.id === compId);
+// End draw
+app.post("/api/admin/end-draw/:id", (req, res) => {
+  const comp = competitions.find(c => c.id == req.params.id);
   if (!comp) return res.status(404).json({ error: "Competition not found" });
+  if (comp.hasEndWinner) return res.status(400).json({ error: "Already ended" });
 
-  if (comp.soldTickets.length === 0) {
-    return res.status(400).json({ error: "No tickets sold" });
+  const compTickets = tickets.filter(t => t.competitionId === comp.id);
+  if (compTickets.length === 0) return res.status(400).json({ error: "No tickets sold" });
+
+  const winner = compTickets[Math.floor(Math.random() * compTickets.length)];
+  comp.hasEndWinner = true;
+  comp.endWinner = winner;
+
+  res.json({ message: "End draw complete", winner });
+});
+
+// -------- USER ROUTES --------
+
+// Get all competitions
+app.get("/api/competitions", (req, res) => {
+  res.json(competitions);
+});
+
+// Buy a ticket
+app.post("/api/competitions/:id/buy", (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+
+  const comp = competitions.find(c => c.id == req.params.id);
+  if (!comp) return res.status(404).json({ error: "Competition not found" });
+  if (comp.soldCount >= comp.maxTickets) {
+    return res.status(400).json({ error: "All tickets sold" });
   }
 
-  // Pick a random sold ticket index
-  const idx = Math.floor(Math.random() * comp.soldTickets.length);
-  const winningTicketNumber = comp.soldTickets[idx];
+  const ticketNumber = ++ticketCounter;
+  const result = comp.instantWins.includes(ticketNumber) ? "Carp" : "Bream";
 
-  const winningTicket = tickets.find(
-    t => t.compId === compId && t.number === winningTicketNumber
-  );
+  const ticket = {
+    id: ticketCounter,
+    competitionId: comp.id,
+    userId: req.session.user.id,
+    number: ticketNumber,
+    result
+  };
 
-  comp.endWinner = winningTicket || { number: winningTicketNumber, note: "Ticket not found in global list (should not happen)" };
+  tickets.push(ticket);
+  comp.soldCount++;
 
-  res.json({
-    message: "End draw completed",
-    winner: comp.endWinner,
-    compId: comp.id,
-  });
+  res.json({ message: "Ticket purchased", ticket });
 });
 
-// ===== Serve admin panel file (optional UI) =====
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
+// Get my tickets
+app.get("/api/my-tickets", (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+
+  const userTickets = tickets
+    .filter(t => t.userId === req.session.user.id)
+    .map(t => ({
+      number: t.number,
+      result: t.result,
+      competition: competitions.find(c => c.id === t.competitionId)?.name || "Unknown"
+    }));
+
+  res.json(userTickets);
 });
 
-// ===== Start =====
+// -------- START SERVER --------
 app.listen(PORT, () => {
   console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
 });
