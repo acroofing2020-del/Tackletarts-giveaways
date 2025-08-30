@@ -1,8 +1,7 @@
-
 const express = require("express");
 const session = require("express-session");
 const bodyParser = require("body-parser");
-const bcrypt = require("bcryptjs"); // lightweight bcrypt alternative
+const bcrypt = require("bcryptjs");
 const path = require("path");
 
 const app = express();
@@ -11,146 +10,120 @@ const PORT = process.env.PORT || 10000;
 // Middleware
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
-app.use(session({
-  secret: process.env.SESSION_SECRET || "supersecret",
-  resave: false,
-  saveUninitialized: false
-}));
+app.use(
+  session({
+    secret: "supersecretkey",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
-// In-memory storage (replace with DB later)
-let users = [];
-let competitions = [];
-let tickets = [];
-let compCounter = 1;
-let ticketCounter = 1;
+// ===== In-memory storage (replace with database later) =====
+let users = []; // { id, email, passwordHash }
+let competitions = []; // { id, name, description, image, maxTickets, soldCount }
+let tickets = []; // { userId, competitionId, number, result }
 
-// -------- AUTH ROUTES --------
+// ===== Helper =====
+function requireLogin(req, res, next) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Not logged in" });
+  }
+  next();
+}
 
-// Signup
+// ===== Auth Routes =====
 app.post("/api/signup", async (req, res) => {
   const { email, password } = req.body;
-  if (users.find(u => u.email === email)) {
-    return res.status(400).json({ error: "Email already exists" });
+  if (users.find((u) => u.email === email)) {
+    return res.status(400).json({ error: "Email already registered" });
   }
-  const hashed = await bcrypt.hash(password, 10);
-  const user = { id: users.length + 1, email, password: hashed };
-  users.push(user);
-  req.session.user = user;
-  res.json({ message: "Signup successful", user: { id: user.id, email: user.email } });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const newUser = { id: users.length + 1, email, passwordHash };
+  users.push(newUser);
+  req.session.userId = newUser.id;
+  res.json({ success: true });
 });
 
-// Login
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
-  const user = users.find(u => u.email === email);
-  if (!user) return res.status(400).json({ error: "Invalid email" });
+  const user = users.find((u) => u.email === email);
+  if (!user) return res.status(400).json({ error: "Invalid login" });
 
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(400).json({ error: "Wrong password" });
+  const match = await bcrypt.compare(password, user.passwordHash);
+  if (!match) return res.status(400).json({ error: "Invalid login" });
 
-  req.session.user = user;
-  res.json({ message: "Login successful" });
+  req.session.userId = user.id;
+  res.json({ success: true });
 });
 
-// Logout
 app.post("/api/logout", (req, res) => {
-  req.session.destroy(() => res.json({ message: "Logged out" }));
+  req.session.destroy(() => res.json({ success: true }));
 });
 
-// -------- ADMIN ROUTES --------
-
-// Create competition
-app.post("/api/admin/competitions", (req, res) => {
-  const { name, description, image, maxTickets } = req.body;
-  const comp = {
-    id: compCounter++,
-    name,
-    description,
-    image,
-    maxTickets: parseInt(maxTickets) || 200000,
-    soldCount: 0,
-    instantWins: [],
-    hasEndWinner: false,
-    endWinner: null
-  };
-
-  // Pre-generate 100 instant win ticket numbers
-  const winSet = new Set();
-  while (winSet.size < 100) {
-    winSet.add(Math.floor(Math.random() * comp.maxTickets) + 1);
-  }
-  comp.instantWins = [...winSet];
-
-  competitions.push(comp);
-  res.json({ message: "Competition created", comp });
-});
-
-// End draw
-app.post("/api/admin/end-draw/:id", (req, res) => {
-  const comp = competitions.find(c => c.id == req.params.id);
-  if (!comp) return res.status(404).json({ error: "Competition not found" });
-  if (comp.hasEndWinner) return res.status(400).json({ error: "Already ended" });
-
-  const compTickets = tickets.filter(t => t.competitionId === comp.id);
-  if (compTickets.length === 0) return res.status(400).json({ error: "No tickets sold" });
-
-  const winner = compTickets[Math.floor(Math.random() * compTickets.length)];
-  comp.hasEndWinner = true;
-  comp.endWinner = winner;
-
-  res.json({ message: "End draw complete", winner });
-});
-
-// -------- USER ROUTES --------
-
-// Get all competitions
+// ===== Competitions =====
 app.get("/api/competitions", (req, res) => {
   res.json(competitions);
 });
 
-// Buy a ticket
-app.post("/api/competitions/:id/buy", (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
-
-  const comp = competitions.find(c => c.id == req.params.id);
+app.post("/api/enter/:id", requireLogin, (req, res) => {
+  const comp = competitions.find((c) => c.id == req.params.id);
   if (!comp) return res.status(404).json({ error: "Competition not found" });
   if (comp.soldCount >= comp.maxTickets) {
     return res.status(400).json({ error: "All tickets sold" });
   }
 
-  const ticketNumber = ++ticketCounter;
-  const result = comp.instantWins.includes(ticketNumber) ? "Carp" : "Bream";
-
-  const ticket = {
-    id: ticketCounter,
-    competitionId: comp.id,
-    userId: req.session.user.id,
-    number: ticketNumber,
-    result
-  };
-
-  tickets.push(ticket);
+  // Assign ticket number
+  const ticketNum = comp.soldCount + 1;
   comp.soldCount++;
 
-  res.json({ message: "Ticket purchased", ticket });
+  // Random instant win 5%
+  const isInstantWin = Math.random() < 0.05;
+  const result = isInstantWin ? "carp" : "bream";
+
+  const newTicket = {
+    userId: req.session.userId,
+    competitionId: comp.id,
+    number: ticketNum,
+    result,
+  };
+  tickets.push(newTicket);
+
+  res.json({ number: ticketNum, result });
 });
 
-// Get my tickets
-app.get("/api/my-tickets", (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
-
+// ===== Dashboard =====
+app.get("/api/dashboard", requireLogin, (req, res) => {
+  const user = users.find((u) => u.id === req.session.userId);
   const userTickets = tickets
-    .filter(t => t.userId === req.session.user.id)
-    .map(t => ({
-      number: t.number,
-      result: t.result,
-      competition: competitions.find(c => c.id === t.competitionId)?.name || "Unknown"
-    }));
+    .filter((t) => t.userId === user.id)
+    .map((t) => {
+      const comp = competitions.find((c) => c.id === t.competitionId);
+      return {
+        competition: comp ? comp.name : "Unknown",
+        number: t.number,
+        result: t.result,
+      };
+    });
 
-  res.json(userTickets);
+  res.json({ email: user.email, tickets: userTickets });
 });
 
-// -------- START SERVER --------
+// ===== Admin (simple) =====
+app.post("/api/admin/create", (req, res) => {
+  const { name, description, image, maxTickets } = req.body;
+  const newComp = {
+    id: competitions.length + 1,
+    name,
+    description,
+    image,
+    maxTickets,
+    soldCount: 0,
+  };
+  competitions.push(newComp);
+  res.json({ success: true, comp: newComp });
+});
+
+// ===== Start Server =====
 app.listen(PORT, () => {
-  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
+  console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
 });
