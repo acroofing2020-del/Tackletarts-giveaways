@@ -4,40 +4,98 @@
   <meta charset="UTF-8">
   <title>Admin - Tackle Tarts</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #fffaf0; }
-    h1 { color: #800000; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f5f7fa;
+      color: #333;
+    }
+    header {
+      background: #004080;
+      color: white;
+      padding: 15px;
+      text-align: center;
+    }
+    .container {
+      padding: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+    h2 {
+      color: #004080;
+    }
+    form {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
     input, textarea {
-      display: block;
-      margin: 10px 0;
-      padding: 8px;
-      width: 300px;
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 8px;
     }
     button {
+      background: #004080;
+      color: white;
       padding: 10px 15px;
-      background: #800000;
-      color: #fff;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
+      margin-top: 10px;
     }
-    button:hover { background: #b22222; }
+    button:hover {
+      background: #0066cc;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      padding: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .card h3 {
+      margin: 0;
+      color: #004080;
+    }
+    .winner {
+      color: green;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <h1>Admin Panel</h1>
-  <h2>Add Competition</h2>
-  <input id="name" placeholder="Competition Name">
-  <textarea id="description" placeholder="Description"></textarea>
-  <input id="image" placeholder="Image URL">
-  <input id="maxTickets" type="number" placeholder="Max Tickets (e.g. 200000)">
-  <button onclick="addCompetition()">Add Competition</button>
+  <header>
+    <h1>🎣 Admin Panel - Tackle Tarts</h1>
+  </header>
+
+  <div class="container">
+    <h2>Create New Competition</h2>
+    <form id="compForm">
+      <input type="text" id="name" placeholder="Competition Name" required>
+      <textarea id="description" placeholder="Competition Description" required></textarea>
+      <input type="text" id="image" placeholder="Image URL" required>
+      <input type="number" id="maxTickets" placeholder="Max Tickets (default 200000)">
+      <button type="submit">Create Competition</button>
+    </form>
+
+    <h2>Manage Competitions</h2>
+    <div id="competitions"></div>
+  </div>
 
   <script>
-    async function addCompetition() {
+    const form = document.getElementById("compForm");
+    const compsDiv = document.getElementById("competitions");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
       const name = document.getElementById("name").value;
       const description = document.getElementById("description").value;
       const image = document.getElementById("image").value;
-      const maxTickets = document.getElementById("maxTickets").value;
+      const maxTickets = document.getElementById("maxTickets").value || 200000;
 
       const res = await fetch("/api/admin/competitions", {
         method: "POST",
@@ -46,12 +104,49 @@
       });
 
       if (res.ok) {
-        alert("✅ Competition added!");
+        alert("✅ Competition created!");
+        loadCompetitions();
+        form.reset();
       } else {
+        alert("❌ Error creating competition.");
+      }
+    });
+
+    async function loadCompetitions() {
+      const res = await fetch("/api/competitions");
+      const comps = await res.json();
+      compsDiv.innerHTML = "";
+
+      comps.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `
+          <h3>${c.name}</h3>
+          <p>${c.description}</p>
+          <p><strong>Tickets:</strong> ${c.soldCount} / ${c.maxTickets}</p>
+          ${c.hasEndWinner 
+            ? `<p class="winner">🏆 End Winner Ticket: #${c.endWinner.number}</p>` 
+            : `<button onclick="endDraw(${c.id})">End Draw</button>`
+          }
+        `;
+        compsDiv.appendChild(div);
+      });
+    }
+
+    async function endDraw(id) {
+      if (!confirm("Are you sure you want to run the end draw?")) return;
+      const res = await fetch(`/api/admin/end-draw/${id}`, { method: "POST" });
+      if (res.ok) {
         const data = await res.json();
-        alert("❌ " + data.error);
+        alert(`🏆 Winner chosen: Ticket #${data.winner.number}`);
+        loadCompetitions();
+      } else {
+        const err = await res.json();
+        alert("❌ " + err.error);
       }
     }
+
+    loadCompetitions();
   </script>
 </body>
 </html>
