@@ -5,14 +5,14 @@ async function drawTickets(count = 1) {
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
 
-    data.results.forEach((r, i) => {
+    data.results.forEach((ticket, i) => {
       const p = document.createElement("p");
-      if (r === "carp") {
+      if (ticket.result === "carp") {
         p.className = "win";
-        p.textContent = `🎉 Ticket ${i + 1}: WINNER — Carp!`;
+        p.textContent = `🎉 Ticket #${ticket.ticketId}: WINNER — Carp!`;
       } else {
         p.className = "lose";
-        p.textContent = `🎟️ Ticket ${i + 1}: Bream`;
+        p.textContent = `🎟️ Ticket #${ticket.ticketId}: Bream`;
       }
       resultsDiv.appendChild(p);
     });
