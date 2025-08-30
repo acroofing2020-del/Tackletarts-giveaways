@@ -2,128 +2,72 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Dashboard</title>
+  <title>Tackle Tarts Giveaways</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    h1 { color: #333; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #eee; }
-    .section { margin-bottom: 40px; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(120deg, #89f7fe, #66a6ff);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    header h1 {
+      font-size: 2.5em;
+      color: #004080;
+    }
+    header p {
+      font-size: 1.2em;
+      color: #222;
+    }
+    .links {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      background: #004080;
+      color: #fff;
+      padding: 15px 25px;
+      text-decoration: none;
+      font-size: 1.1em;
+      border-radius: 8px;
+      transition: background 0.3s;
+    }
+    .btn:hover {
+      background: #0066cc;
+    }
+    footer {
+      position: absolute;
+      bottom: 15px;
+      font-size: 0.9em;
+      color: #333;
+    }
   </style>
 </head>
 <body>
-  <h1>🎣 Admin Dashboard</h1>
+  <header>
+    <h1>🎣 Welcome to Tackle Tarts Giveaways</h1>
+    <p>Enter competitions, collect tickets, and hook the Carp for a big win!</p>
+  </header>
 
-  <div class="section">
-    <h2>Latest Tickets</h2>
-    <table id="ticketsTable">
-      <thead>
-        <tr>
-          <th>Email</th>
-          <th>Competition</th>
-          <th>Result</th>
-          <th>Ticket #</th>
-          <th>Time</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <button onclick="resetTickets()">Reset Tickets</button>
+  <div class="links">
+    <a href="/competitions.html" class="btn">View Competitions</a>
+    <a href="/signup.html" class="btn">Sign Up</a>
+    <a href="/login.html" class="btn">Login</a>
   </div>
 
-  <div class="section">
-    <h2>Competition Manager</h2>
-    <form onsubmit="addCompetition(event)">
-      <input type="text" id="name" placeholder="Name" required>
-      <input type="text" id="desc" placeholder="Description" required>
-      <input type="text" id="image" placeholder="Image URL (e.g. /images/rod.png)" required>
-      <button type="submit">Add Competition</button>
-    </form>
-
-    <h3>Existing Competitions</h3>
-    <table id="compsTable">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Active</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <script>
-    async function loadTickets() {
-      const res = await fetch("/api/admin/tickets");
-      const data = await res.json();
-      const tbody = document.querySelector("#ticketsTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(t => {
-        tbody.innerHTML += `<tr>
-          <td>${t.email}</td>
-          <td>${t.competition}</td>
-          <td>${t.result}</td>
-          <td>${t.number}</td>
-          <td>${t.time}</td>
-        </tr>`;
-      });
-    }
-
-    async function resetTickets() {
-      if (!confirm("Reset all tickets?")) return;
-      await fetch("/api/admin/reset", { method: "POST" });
-      loadTickets();
-    }
-
-    async function loadCompetitions() {
-      const res = await fetch("/api/admin/competitions");
-      const data = await res.json();
-      const tbody = document.querySelector("#compsTable tbody");
-      tbody.innerHTML = "";
-      data.forEach(c => {
-        tbody.innerHTML += `<tr>
-          <td>${c.id}</td>
-          <td>${c.name}</td>
-          <td>${c.description}</td>
-          <td>${c.active ? "Yes" : "No"}</td>
-          <td>
-            <button onclick="toggleComp(${c.id})">Toggle</button>
-            <button onclick="deleteComp(${c.id})">Delete</button>
-          </td>
-        </tr>`;
-      });
-    }
-
-    async function addCompetition(e) {
-      e.preventDefault();
-      const name = document.getElementById("name").value;
-      const desc = document.getElementById("desc").value;
-      const image = document.getElementById("image").value;
-      await fetch("/api/admin/competitions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: desc, image })
-      });
-      loadCompetitions();
-    }
-
-    async function toggleComp(id) {
-      await fetch(`/api/admin/competitions/${id}/toggle`, { method: "POST" });
-      loadCompetitions();
-    }
-
-    async function deleteComp(id) {
-      if (!confirm("Delete this competition?")) return;
-      await fetch(`/api/admin/competitions/${id}`, { method: "DELETE" });
-      loadCompetitions();
-    }
-
-    loadTickets();
-    loadCompetitions();
-  </script>
+  <footer>
+    © 2025 Tackle Tarts Giveaways. All rights reserved.
+  </footer>
 </body>
 </html>
