@@ -1,156 +1,127 @@
-// server.js
 const express = require("express");
 const session = require("express-session");
 const bodyParser = require("body-parser");
-const sqlite3 = require("sqlite3").verbose();
+const bcrypt = require("bcrypt");
 const path = require("path");
 const basicAuth = require("express-basic-auth");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ==== CONFIG ====
-const MAX_TICKETS = 200000; // total entries
-const WIN_NUMBERS = [77777, 150000]; // 🎣 Carp winning tickets
-
-// ==== MIDDLEWARE ====
+// ===== Middleware =====
 app.use(bodyParser.json());
-app.use(
-  session({
-    secret: "tackle-tarts-secret",
-    resave: false,
-    saveUninitialized: true,
-  })
-);
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
+app.use(session({
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false
+}));
 
-// ==== DATABASE ====
-const db = new sqlite3.Database("./raffle.db");
+// ===== In-Memory Storage =====
+let users = []; // { id, email, passwordHash }
+let tickets = []; // { id, userId, number, result, compId }
+let competitions = []; // { id, name, description, image, maxTickets, entries: [] }
+let nextTicketNumber = 1;
 
-// create tables if not exist
-db.serialize(() => {
-  db.run(
-    "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT)"
-  );
-  db.run(
-    "CREATE TABLE IF NOT EXISTS competitions (id INTEGER PRIMARY KEY, name TEXT, description TEXT, image TEXT, active INTEGER)"
-  );
-  db.run(
-    "CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY, email TEXT, competition TEXT, result TEXT, number INTEGER, time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-  );
-});
+// ===== Auth Middleware =====
+function requireLogin(req, res, next) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Not logged in" });
+  }
+  next();
+}
 
-// ==== ROUTES ====
-
-// signup
-app.post("/api/signup", (req, res) => {
+// ===== User Routes =====
+app.post("/api/signup", async (req, res) => {
   const { email, password } = req.body;
-  db.run(
-    "INSERT INTO users (email, password) VALUES (?, ?)",
-    [email, password],
-    function (err) {
-      if (err) return res.status(500).send("Signup error");
-      res.json({ success: true });
-    }
-  );
+  if (!email || !password) return res.status(400).json({ error: "Missing fields" });
+
+  const existing = users.find(u => u.email === email);
+  if (existing) return res.status(400).json({ error: "User already exists" });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = { id: users.length + 1, email, passwordHash };
+  users.push(user);
+  res.json({ success: true });
 });
 
-// login
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
-  db.get(
-    "SELECT * FROM users WHERE email = ? AND password = ?",
-    [email, password],
-    (err, row) => {
-      if (row) {
-        req.session.user = row;
-        res.json({ success: true });
-      } else {
-        res.status(401).send("Invalid credentials");
-      }
-    }
-  );
+  const user = users.find(u => u.email === email);
+  if (!user) return res.status(400).json({ error: "Invalid credentials" });
+
+  const match = await bcrypt.compare(password, user.passwordHash);
+  if (!match) return res.status(400).json({ error: "Invalid credentials" });
+
+  req.session.userId = user.id;
+  res.json({ success: true });
 });
 
-// get competitions
+// ===== Competition Routes =====
 app.get("/api/competitions", (req, res) => {
-  db.all("SELECT * FROM competitions WHERE active = 1", (err, rows) => {
-    res.json(rows);
-  });
+  res.json(competitions);
 });
 
-// enter competition
-app.post("/api/enter", (req, res) => {
-  const comp = req.body.competition;
-  const user = req.session.user ? req.session.user.email : "Guest";
-
-  // assign random ticket number
-  const ticketNumber = Math.floor(Math.random() * MAX_TICKETS) + 1;
-
-  // check if it's a winning ticket
-  const result = WIN_NUMBERS.includes(ticketNumber) ? "Carp" : "Bream";
-
-  db.run(
-    "INSERT INTO tickets (email, competition, result, number) VALUES (?, ?, ?, ?)",
-    [user, comp, result, ticketNumber],
-    function (err) {
-      if (err) return res.status(500).send("DB error");
-      res.json({ ticket: ticketNumber, result });
-    }
-  );
+app.post("/api/competitions", (req, res) => {
+  const { name, description, image, maxTickets } = req.body;
+  if (!name || !description || !image) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  const comp = {
+    id: competitions.length + 1,
+    name,
+    description,
+    image,
+    maxTickets: maxTickets || 200000,
+    entries: []
+  };
+  competitions.push(comp);
+  res.json({ success: true, competition: comp });
 });
 
-// ==== ADMIN ====
-app.use(
-  "/api/admin",
-  basicAuth({
-    users: { [process.env.ADMIN_USER || "admin"]: process.env.ADMIN_PASS || "password" },
-    challenge: true,
-  })
-);
-
-// view tickets
-app.get("/api/admin/tickets", (req, res) => {
-  db.all("SELECT * FROM tickets ORDER BY time DESC LIMIT 50", (err, rows) => {
-    res.json(rows);
-  });
+app.delete("/api/competitions/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  competitions = competitions.filter(c => c.id !== id);
+  res.json({ success: true });
 });
 
-// reset tickets
-app.post("/api/admin/reset", (req, res) => {
-  db.run("DELETE FROM tickets", () => res.json({ success: true }));
+// ===== Ticket Entry =====
+app.post("/api/enter/:compId", requireLogin, (req, res) => {
+  const compId = parseInt(req.params.compId);
+  const comp = competitions.find(c => c.id === compId);
+  if (!comp) return res.status(404).json({ error: "Competition not found" });
+
+  if (comp.entries.length >= comp.maxTickets) {
+    return res.status(400).json({ error: "No tickets left for this competition" });
+  }
+
+  const ticketNumber = nextTicketNumber++;
+  const result = Math.random() < 0.05 ? "Carp" : "Bream"; // 5% chance to win
+  const ticket = {
+    id: tickets.length + 1,
+    userId: req.session.userId,
+    number: ticketNumber,
+    result,
+    compId
+  };
+
+  tickets.push(ticket);
+  comp.entries.push(ticket);
+
+  res.json({ success: true, ticket });
 });
 
-// competitions management
-app.get("/api/admin/competitions", (req, res) => {
-  db.all("SELECT * FROM competitions", (err, rows) => res.json(rows));
+// ===== Admin Routes =====
+app.use("/admin", basicAuth({
+  users: { [process.env.ADMIN_USER || "admin"]: process.env.ADMIN_PASS || "password" },
+  challenge: true
+}));
+
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-app.post("/api/admin/competitions", (req, res) => {
-  const { name, description, image } = req.body;
-  db.run(
-    "INSERT INTO competitions (name, description, image, active) VALUES (?, ?, ?, 1)",
-    [name, description, image],
-    () => res.json({ success: true })
-  );
-});
-
-app.post("/api/admin/competitions/:id/toggle", (req, res) => {
-  db.get("SELECT active FROM competitions WHERE id = ?", [req.params.id], (err, row) => {
-    const newVal = row.active ? 0 : 1;
-    db.run("UPDATE competitions SET active = ? WHERE id = ?", [newVal, req.params.id], () =>
-      res.json({ success: true })
-    );
-  });
-});
-
-app.delete("/api/admin/competitions/:id", (req, res) => {
-  db.run("DELETE FROM competitions WHERE id = ?", [req.params.id], () =>
-    res.json({ success: true })
-  );
-});
-
-// ==== START ====
+// ===== Start Server =====
 app.listen(PORT, () => {
-  console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
+  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
 });
