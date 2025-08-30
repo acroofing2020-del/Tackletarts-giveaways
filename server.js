@@ -4,8 +4,9 @@ const helmet = require("helmet");
 const basicAuth = require("express-basic-auth");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
-const bcrypt = require("bcrypt"); // for password hashing
+const bcrypt = require("bcrypt");
 const session = require("express-session");
+const SQLiteStore = require("connect-sqlite3")(session);
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
+    store: new SQLiteStore({ db: "sessions.db", dir: "./" }),
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
