@@ -1,42 +1,87 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <title>Competitions</title>
-  <link rel="stylesheet" href="style.css">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+    h1 { text-align: center; color: #333; }
+    .comp {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 15px auto;
+      max-width: 600px;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .comp img { max-width: 100%; border-radius: 8px; }
+    .comp h2 { margin-top: 10px; }
+    .btn {
+      margin-top: 10px;
+      padding: 10px 20px;
+      border: none;
+      background: #0077cc;
+      color: #fff;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .btn:hover { background: #005fa3; }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      background: #eef;
+      border: 1px solid #ccd;
+      border-radius: 5px;
+    }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Active Competitions</h1>
-    <div id="competitions"></div>
-    <a href="/logout">Logout</a>
-  </div>
+  <h1>🎣 Tackle Tarts Competitions</h1>
+  <div id="comps"></div>
+
   <script>
-    async function loadCompetitions(){
+    // Load competitions from server
+    async function loadCompetitions() {
       const res = await fetch("/api/competitions");
       const comps = await res.json();
-      const div = document.getElementById("competitions");
-      div.innerHTML = "";
+      const container = document.getElementById("comps");
+      container.innerHTML = "";
       comps.forEach(c => {
-        const block = document.createElement("div");
-        block.innerHTML = `
-          <h3>${c.name}</h3>
+        const div = document.createElement("div");
+        div.className = "comp";
+        div.innerHTML = `
+          <img src="${c.image}" alt="${c.name}">
+          <h2>${c.name}</h2>
           <p>${c.description}</p>
-          <img src="${c.image}" width="150">
-          <button onclick="enterComp('${c.name}')">Enter</button>
+          <button class="btn" onclick="enterComp('${c.name}', this)">Enter</button>
+          <div class="result" style="display:none;"></div>
         `;
-        div.appendChild(block);
+        container.appendChild(div);
       });
     }
-    async function enterComp(name){
-      const res = await fetch("/api/enter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competition: name })
-      });
-      const data = await res.json();
-      alert("Your result: " + data.result);
+
+    // Enter competition
+    async function enterComp(name, btn) {
+      btn.disabled = true;
+      btn.innerText = "Entering...";
+      try {
+        const res = await fetch("/api/enter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competition: name })
+        });
+        const data = await res.json();
+        const resultDiv = btn.parentElement.querySelector(".result");
+        resultDiv.style.display = "block";
+        resultDiv.innerHTML = `🎟️ Your ticket #<b>${data.ticket}</b><br>Result: <b>${data.result}</b>`;
+      } catch (err) {
+        alert("Error entering competition");
+      }
+      btn.disabled = false;
+      btn.innerText = "Enter";
     }
+
     loadCompetitions();
   </script>
 </body>
