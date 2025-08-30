@@ -13,6 +13,7 @@
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "sqlite3": "^5.1.6",
-    "basic-auth": "^2.0.1"
+    "basic-auth": "^2.0.1",
+    "express-basic-auth": "^1.2.1"
   }
 }
