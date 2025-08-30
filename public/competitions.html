@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Competitions - Tackle Tarts Giveaways</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🎣 Active Competitions</h1>
+      <p class="sub">Choose a competition and try your luck!</p>
+    </header>
+
+    <div id="competitions"></div>
+  </div>
+
+  <script>
+    async function loadCompetitions(){
+      const res = await fetch("/api/competitions");
+      const comps = await res.json();
+      const div = document.getElementById("competitions");
+      div.innerHTML = "";
+
+      comps.forEach(c => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <h2>${c.name}</h2>
+          <p>${c.description}</p>
+          <img src="${c.image}" width="200" alt="${c.name}">
+          <br>
+          <button onclick="enterCompetition(${c.id})" class="btn primary">Enter</button>
+        `;
+        div.appendChild(card);
+      });
+    }
+
+    async function enterCompetition(id){
+      const res = await fetch("/api/draw/" + id + "?count=1", { method: "POST" });
+      if (res.status === 401) {
+        alert("You must log in first!");
+        window.location = "/login.html";
+        return;
+      }
+      const data = await res.json();
+      const result = data.results[0];
+      alert(result.result === "carp" ? "🎉 You won a Carp prize!" : "🐟 Sorry, Bream this time.");
+    }
+
+    loadCompetitions();
+  </script>
+</body>
+</html>
