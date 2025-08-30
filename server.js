@@ -1,48 +1,46 @@
 const express = require("express");
 const session = require("express-session");
-const bodyParser = require("body-parser");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs"); // switched from bcrypt to bcryptjs
 const path = require("path");
-const basicAuth = require("express-basic-auth");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
 // ===== Middleware =====
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
-app.use(session({
-  secret: process.env.SESSION_SECRET || "supersecret",
-  resave: false,
-  saveUninitialized: false
-}));
 
-// ===== In-Memory Storage =====
-let users = []; // { id, email, passwordHash }
-let tickets = []; // { id, userId, number, result, compId }
-let competitions = []; // { id, name, description, image, maxTickets, entries: [] }
-let nextTicketNumber = 1;
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "secret-key",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
-// ===== Auth Middleware =====
+// ===== In-memory storage (reset on server restart) =====
+let users = []; // {id, email, passwordHash}
+let competitions = []; // {id, name, description, image, maxTickets}
+let tickets = []; // {id, userId, compId, number, result}
+
+// ===== Helpers =====
 function requireLogin(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: "Not logged in" });
-  }
+  if (!req.session.userId) return res.status(401).json({ error: "Not logged in" });
   next();
 }
 
-// ===== User Routes =====
+// ===== Routes =====
 app.post("/api/signup", async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Missing fields" });
-
-  const existing = users.find(u => u.email === email);
-  if (existing) return res.status(400).json({ error: "User already exists" });
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = { id: users.length + 1, email, passwordHash };
+  if (users.find(u => u.email === email)) {
+    return res.status(400).json({ error: "Email already exists" });
+  }
+  const hash = await bcrypt.hash(password, 10);
+  const user = { id: users.length + 1, email, passwordHash: hash };
   users.push(user);
-  res.json({ success: true });
+  req.session.userId = user.id;
+  res.json({ message: "User created", user: { id: user.id, email: user.email } });
 });
 
 app.post("/api/login", async (req, res) => {
@@ -50,67 +48,49 @@ app.post("/api/login", async (req, res) => {
   const user = users.find(u => u.email === email);
   if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) return res.status(400).json({ error: "Invalid credentials" });
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) return res.status(400).json({ error: "Invalid credentials" });
 
   req.session.userId = user.id;
-  res.json({ success: true });
+  res.json({ message: "Login successful" });
 });
 
-// ===== Competition Routes =====
+app.post("/api/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.json({ message: "Logged out" });
+  });
+});
+
+// ===== Competitions =====
 app.get("/api/competitions", (req, res) => {
   res.json(competitions);
 });
 
-app.post("/api/competitions", (req, res) => {
-  const { name, description, image, maxTickets } = req.body;
-  if (!name || !description || !image) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-  const comp = {
-    id: competitions.length + 1,
-    name,
-    description,
-    image,
-    maxTickets: maxTickets || 200000,
-    entries: []
-  };
-  competitions.push(comp);
-  res.json({ success: true, competition: comp });
-});
-
-app.delete("/api/competitions/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  competitions = competitions.filter(c => c.id !== id);
-  res.json({ success: true });
-});
-
-// ===== Ticket Entry =====
 app.post("/api/enter/:compId", requireLogin, (req, res) => {
   const compId = parseInt(req.params.compId);
   const comp = competitions.find(c => c.id === compId);
   if (!comp) return res.status(404).json({ error: "Competition not found" });
 
-  if (comp.entries.length >= comp.maxTickets) {
-    return res.status(400).json({ error: "No tickets left for this competition" });
+  const userEntries = tickets.filter(t => t.compId === compId);
+  if (userEntries.length >= comp.maxTickets) {
+    return res.status(400).json({ error: "All tickets sold out" });
   }
 
-  const ticketNumber = nextTicketNumber++;
-  const result = Math.random() < 0.05 ? "Carp" : "Bream"; // 5% chance to win
+  const ticketNum = userEntries.length + 1;
+  const result = Math.random() < 0.05 ? "Carp" : "Bream";
+
   const ticket = {
     id: tickets.length + 1,
     userId: req.session.userId,
-    number: ticketNumber,
+    compId,
+    number: ticketNum,
     result,
-    compId
   };
-
   tickets.push(ticket);
-  comp.entries.push(ticket);
-
-  res.json({ success: true, ticket });
+  res.json({ message: "Ticket entered", ticket });
 });
-// ===== User Dashboard Tickets =====
+
+// ===== Dashboard (User Tickets) =====
 app.get("/api/my-tickets", requireLogin, (req, res) => {
   const userTickets = tickets
     .filter(t => t.userId === req.session.userId)
@@ -119,23 +99,31 @@ app.get("/api/my-tickets", requireLogin, (req, res) => {
       return {
         number: t.number,
         result: t.result,
-        compName: comp ? comp.name : "Unknown"
+        compName: comp ? comp.name : "Unknown",
       };
     });
-
   res.json(userTickets);
 });
-// ===== Admin Routes =====
-app.use("/admin", basicAuth({
-  users: { [process.env.ADMIN_USER || "admin"]: process.env.ADMIN_PASS || "password" },
-  challenge: true
-}));
 
+// ===== Admin (basic, no password yet) =====
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
+app.post("/api/admin/competitions", (req, res) => {
+  const { name, description, image, maxTickets } = req.body;
+  const comp = {
+    id: competitions.length + 1,
+    name,
+    description,
+    image,
+    maxTickets: parseInt(maxTickets) || 100,
+  };
+  competitions.push(comp);
+  res.json({ message: "Competition created", comp });
+});
+
 // ===== Start Server =====
 app.listen(PORT, () => {
-  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
+  console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
 });
