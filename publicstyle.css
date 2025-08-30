@@ -1,162 +1,25 @@
-Perfect 👍 we’ll do it step by step so it’s easy. You’ll end up with a GitHub repo that Render can deploy.
-
-
----
-
-📝 Step 1 — Create Your Repo
-
-1. Go to github.com → sign in.
-
-
-2. Click the + (top right) → New repository.
-
-
-3. Name it: tackle-tarts-giveaways
-
-
-4. Leave it Public → click Create repository.
-
-
-
-Now you should see an “Add file” button.
-
-
----
-
-📝 Step 2 — Add the Main Files
-
-We’ll start with the two most important files:
-
-
----
-
-📄 File 1: package.json
-
-On GitHub → “Add file” → “Create new file”.
-
-File name: package.json
-
-Paste this content:
-
-
-{
-  "name": "tackle-tarts-giveaways",
-  "version": "1.0.0",
-  "description": "Tackle Tarts Giveaways Raffle App",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "sqlite3": "^5.1.7",
-    "helmet": "^7.1.0",
-    "express-basic-auth": "^1.2.1",
-    "express-rate-limit": "^7.1.5"
-  }
-}
-
-Scroll down → click Commit new file ✅
-
-
----
-
-📄 File 2: server.js
-
-Click Add file → Create new file again.
-
-File name: server.js
-
-Paste this:
-
-
-const express = require("express");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const basicAuth = require("express-basic-auth");
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
-
-// Env variables
-const PORT = process.env.PORT || 8080;
-const WIN_PROB = parseFloat(process.env.WIN_PROB || "0.05");
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "change-me";
-
-// Setup app
-const app = express();
-app.use(helmet());
-app.use(express.json());
-app.use(express.static("public"));
-
-// Rate limiter (100 requests / 15 minutes per IP)
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-// Database setup
-const db = new sqlite3.Database("data.db");
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS tickets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
-});
-
-// Serve main page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// API: draw tickets
-app.post("/api/draw", (req, res) => {
-  let draws = parseInt(req.query.count || "1");
-  if (draws > 10) draws = 10;
-
-  const results = [];
-  for (let i = 0; i < draws; i++) {
-    const isWin = Math.random() < WIN_PROB;
-    const ticket = isWin ? "carp" : "bream";
-    results.push(ticket);
-
-    db.run("INSERT INTO tickets (result) VALUES (?)", [ticket]);
-  }
-
-  res.json({ results });
-});
-
-// Admin area
-app.use(
-  "/admin",
-  basicAuth({
-    users: { [ADMIN_USER]: ADMIN_PASS },
-    challenge: true
-  }),
-  express.static("admin")
-);
-
-// API: get winners
-app.get("/api/winners", (req, res) => {
-  db.all(
-    "SELECT * FROM tickets WHERE result='carp' ORDER BY created_at DESC",
-    [],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    }
-  );
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🎣 Tackle Tarts Giveaway running on port ${PORT}`);
-});
-
-Scroll down → Commit new file ✅
-
-
----
-
-👉 At this point, you’ve got the backend ready. Next, we’ll add the frontend files (/public/index.html, /public/style.css, and /admin/index.html).
-
-Do you want me to paste the raffle page (index.html) next?
-
+:root{ --bg:#0b1220; --card:#121a2a; --muted:#9fb0cc; --text:#eaf2ff; --accent:#62d1ff; --win:#2ee6a8; --lose:#8aa4c4; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:24px}
+header h1{margin:0 0 6px 0}
+.sub{color:var(--muted);margin:0 0 16px 0}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.0) 40%),var(--card);border:1px solid #25324d;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+h3{margin:0 0 10px 0}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+.btn{cursor:pointer;border:1px solid #274164;background:linear-gradient(180deg,#163155,#122646);color:var(--text);padding:12px 16px;border-radius:12px;font-weight:600}
+.btn.primary{border-color:#2a77a8;background:linear-gradient(180deg,#2a77a8,#205a80)}
+.btn.subtle{opacity:.8}
+.hint{color:var(--muted);font-size:12px;margin-top:8px}
+.tickets{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:8px}
+.ticket{border-radius:16px;border:1px dashed #2a3c60;padding:12px;background:#0e1728;position:relative}
+.ticket.win{border:1px solid var(--win);box-shadow:0 0 0 2px rgba(46,230,168,.15) inset,0 10px 30px rgba(46,230,168,.15)}
+.ticket .id{font-size:12px;color:var(--muted);margin-bottom:6px}
+.ticket .fish{display:flex;align-items:center;justify-content:center;height:110px}
+.ticket .fish svg{width:110px;height:110px}
+.win-badge{position:absolute;top:8px;right:8px;background:linear-gradient(180deg,#1a5,#0c4);border:1px solid #1e6a50;color:#0b1d16;padding:4px 8px;border-radius:999px;font-weight:800}
+footer{color:var(--muted);font-size:13px;margin-top:20px}
+.confetti{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:hidden}
+.piece{position:absolute;width:8px;height:14px;opacity:0;animation:fall linear forwards}
+@keyframes fall{0%{transform:translateY(-20vh) rotate(0);opacity:0}10%{opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
+a{color:var(--accent)}
