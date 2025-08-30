@@ -110,7 +110,21 @@ app.post("/api/enter/:compId", requireLogin, (req, res) => {
 
   res.json({ success: true, ticket });
 });
+// ===== User Dashboard Tickets =====
+app.get("/api/my-tickets", requireLogin, (req, res) => {
+  const userTickets = tickets
+    .filter(t => t.userId === req.session.userId)
+    .map(t => {
+      const comp = competitions.find(c => c.id === t.compId);
+      return {
+        number: t.number,
+        result: t.result,
+        compName: comp ? comp.name : "Unknown"
+      };
+    });
 
+  res.json(userTickets);
+});
 // ===== Admin Routes =====
 app.use("/admin", basicAuth({
   users: { [process.env.ADMIN_USER || "admin"]: process.env.ADMIN_PASS || "password" },
