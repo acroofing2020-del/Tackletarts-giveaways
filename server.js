@@ -30,9 +30,18 @@ app.use(limiter);
 // --- Database setup ---
 const db = new sqlite3.Database("raffle.db");
 db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS competitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    description TEXT,
+    image TEXT,
+    active INTEGER DEFAULT 1
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
+    competition_id INTEGER,
     result TEXT,
     time DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
@@ -42,6 +51,20 @@ db.serialize(() => {
     email TEXT UNIQUE,
     passwordHash TEXT
   )`);
+
+  // Insert a sample competition if none exist
+  db.get("SELECT COUNT(*) as count FROM competitions", (err, row) => {
+    if (!err && row.count === 0) {
+      db.run(
+        "INSERT INTO competitions (name, description, image) VALUES (?, ?, ?)",
+        ["Fishing Rod Giveaway", "Win a top-quality fishing rod!", "/images/rod.png"]
+      );
+      db.run(
+        "INSERT INTO competitions (name, description, image) VALUES (?, ?, ?)",
+        ["Carp Bait Bundle", "Win a huge bundle of carp bait!", "/images/bait.png"]
+      );
+    }
+  });
 });
 
 // --- Win probability (default 5%) ---
@@ -100,19 +123,28 @@ app.post("/api/logout", (req, res) => {
   });
 });
 
+// --- API: List competitions ---
+app.get("/api/competitions", (req, res) => {
+  db.all("SELECT * FROM competitions WHERE active = 1", (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
 // --- API: Draw tickets (must be logged in) ---
-app.post("/api/draw", requireLogin, (req, res) => {
+app.post("/api/draw/:competitionId", requireLogin, (req, res) => {
+  const competitionId = parseInt(req.params.competitionId);
   const count = parseInt(req.query.count) || 1;
   const results = [];
 
   const stmt = db.prepare(
-    "INSERT INTO tickets (user_id, result) VALUES (?, ?)"
+    "INSERT INTO tickets (user_id, competition_id, result) VALUES (?, ?, ?)"
   );
 
   let completed = 0;
   for (let i = 0; i < count; i++) {
     const result = Math.random() < winProb ? "carp" : "bream";
-    stmt.run(req.session.userId, result, function (err) {
+    stmt.run(req.session.userId, competitionId, result, function (err) {
       completed++;
       if (!err) {
         results.push({ ticketId: this.lastID, result });
@@ -149,8 +181,10 @@ app.get(
   }),
   (req, res) => {
     db.all(
-      `SELECT tickets.id, users.email, tickets.result, tickets.time
-       FROM tickets LEFT JOIN users ON tickets.user_id = users.id
+      `SELECT tickets.id, users.email, competitions.name as competition, tickets.result, tickets.time
+       FROM tickets 
+       LEFT JOIN users ON tickets.user_id = users.id
+       LEFT JOIN competitions ON tickets.competition_id = competitions.id
        ORDER BY time DESC LIMIT 50`,
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
