@@ -16,7 +16,12 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 app.use(express.static("public"));
+const path = require("path");
 
+// Serve admin dashboard after login
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
 // Rate limiter (100 requests / 15 minutes per IP)
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
