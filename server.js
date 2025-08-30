@@ -52,7 +52,7 @@ db.serialize(() => {
     passwordHash TEXT
   )`);
 
-  // Insert a sample competition if none exist
+  // Insert demo competitions if empty
   db.get("SELECT COUNT(*) as count FROM competitions", (err, row) => {
     if (!err && row.count === 0) {
       db.run(
@@ -67,7 +67,7 @@ db.serialize(() => {
   });
 });
 
-// --- Win probability (default 5%) ---
+// --- Win probability ---
 let winProb = process.env.WIN_PROB ? parseFloat(process.env.WIN_PROB) : 0.05;
 
 // --- Static files ---
@@ -131,7 +131,7 @@ app.get("/api/competitions", (req, res) => {
   });
 });
 
-// --- API: Draw tickets (must be logged in) ---
+// --- API: Draw tickets ---
 app.post("/api/draw/:competitionId", requireLogin, (req, res) => {
   const competitionId = parseInt(req.params.competitionId);
   const count = parseInt(req.query.count) || 1;
@@ -159,72 +159,91 @@ app.post("/api/draw/:competitionId", requireLogin, (req, res) => {
 });
 
 // --- Admin auth ---
-app.use(
-  "/admin",
-  basicAuth({
-    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
-    challenge: true,
-  })
-);
+const adminAuth = basicAuth({
+  users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+  challenge: true,
+});
 
 // --- Admin dashboard page ---
-app.get("/admin", (req, res) => {
+app.get("/admin", adminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-// --- API: Admin list tickets ---
-app.get(
-  "/api/admin/tickets",
-  basicAuth({
-    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
-    challenge: true,
-  }),
-  (req, res) => {
-    db.all(
-      `SELECT tickets.id, users.email, competitions.name as competition, tickets.result, tickets.time
-       FROM tickets 
-       LEFT JOIN users ON tickets.user_id = users.id
-       LEFT JOIN competitions ON tickets.competition_id = competitions.id
-       ORDER BY time DESC LIMIT 50`,
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-      }
-    );
-  }
-);
-
-// --- API: Admin set probability ---
-app.post(
-  "/api/admin/setprob",
-  basicAuth({
-    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
-    challenge: true,
-  }),
-  (req, res) => {
-    const newProb = req.body.prob;
-    if (typeof newProb === "number" && newProb >= 0 && newProb <= 1) {
-      winProb = newProb;
-      return res.json({ ok: true, winProb });
+// --- Admin tickets ---
+app.get("/api/admin/tickets", adminAuth, (req, res) => {
+  db.all(
+    `SELECT tickets.id, users.email, competitions.name as competition, tickets.result, tickets.time
+     FROM tickets 
+     LEFT JOIN users ON tickets.user_id = users.id
+     LEFT JOIN competitions ON tickets.competition_id = competitions.id
+     ORDER BY time DESC LIMIT 50`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
     }
-    res.status(400).json({ error: "Invalid probability" });
-  }
-);
+  );
+});
 
-// --- API: Admin reset tickets ---
-app.post(
-  "/api/admin/reset",
-  basicAuth({
-    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
-    challenge: true,
-  }),
-  (req, res) => {
-    db.run("DELETE FROM tickets", (err) => {
+// --- Admin set probability ---
+app.post("/api/admin/setprob", adminAuth, (req, res) => {
+  const newProb = req.body.prob;
+  if (typeof newProb === "number" && newProb >= 0 && newProb <= 1) {
+    winProb = newProb;
+    return res.json({ ok: true, winProb });
+  }
+  res.status(400).json({ error: "Invalid probability" });
+});
+
+// --- Admin reset tickets ---
+app.post("/api/admin/reset", adminAuth, (req, res) => {
+  db.run("DELETE FROM tickets", (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ ok: true });
+  });
+});
+
+// --- Admin competitions ---
+app.get("/api/admin/competitions", adminAuth, (req, res) => {
+  db.all("SELECT * FROM competitions", (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post("/api/admin/competitions", adminAuth, (req, res) => {
+  const { name, description, image } = req.body;
+  if (!name || !description || !image) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  db.run(
+    "INSERT INTO competitions (name, description, image, active) VALUES (?, ?, ?, 1)",
+    [name, description, image],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ ok: true, id: this.lastID });
+    }
+  );
+});
+
+app.post("/api/admin/competitions/:id/toggle", adminAuth, (req, res) => {
+  const id = req.params.id;
+  db.run(
+    "UPDATE competitions SET active = CASE active WHEN 1 THEN 0 ELSE 1 END WHERE id = ?",
+    [id],
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ ok: true });
-    });
-  }
-);
+    }
+  );
+});
+
+app.delete("/api/admin/competitions/:id", adminAuth, (req, res) => {
+  const id = req.params.id;
+  db.run("DELETE FROM competitions WHERE id = ?", [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ ok: true });
+  });
+});
 
 // --- Start server ---
 app.listen(PORT, () => {
