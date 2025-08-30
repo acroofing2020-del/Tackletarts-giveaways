@@ -98,4 +98,9 @@ app.post("/api/admin/reset", basicAuth({
 // --- Start server ---
 app.listen(PORT, () => {
   console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
-});
+});db.run(`CREATE TABLE IF NOT EXISTS tickets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user TEXT,
+  result TEXT,
+  time DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
