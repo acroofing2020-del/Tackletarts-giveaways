@@ -1,26 +1,23 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Dashboard - Tackle Tarts Giveaways</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin - Tackle Tarts Giveaways</title>
   <link rel="stylesheet" href="/style.css">
   <style>
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 15px;
+      margin-top: 20px;
     }
     th, td {
+      border: 1px solid #ccc;
       padding: 8px;
-      border-bottom: 1px solid #334155;
       text-align: left;
     }
     th {
-      background: #1c2942;
-    }
-    tr:hover {
-      background: #2d3b56;
+      background: #eee;
     }
   </style>
 </head>
@@ -28,15 +25,17 @@
   <div class="wrap">
     <header>
       <h1>🎣 Admin Dashboard</h1>
-      <p class="sub">Manage Tackle Tarts Giveaways</p>
+      <p class="sub">Manage tickets and competitions</p>
     </header>
 
-    <section class="card">
-      <h2>🎟️ Recent Tickets</h2>
-      <table id="ticketsTable">
+    <section>
+      <h2>Recent Tickets</h2>
+      <table id="tickets">
         <thead>
           <tr>
             <th>ID</th>
+            <th>User</th>
+            <th>Competition</th>
             <th>Result</th>
             <th>Time</th>
           </tr>
@@ -45,66 +44,55 @@
       </table>
     </section>
 
-    <section class="card">
-      <h2>⚙️ Controls</h2>
-      <div class="controls">
-        <label for="probInput">Win Probability (0–1):</label>
-        <input type="number" id="probInput" step="0.01" min="0" max="1" />
-        <button id="setProb" class="btn primary">Update</button>
-      </div>
-      <p class="hint">Example: 0.05 = 5% chance of winning</p>
-
-      <div class="controls" style="margin-top:10px;">
-        <button id="resetTickets" class="btn">🗑️ Reset Tickets</button>
-      </div>
+    <section>
+      <h2>Controls</h2>
+      <button onclick="resetTickets()" class="btn danger">Reset All Tickets</button>
+      <br><br>
+      <label>Set Win Probability (0–1):</label>
+      <input type="number" id="prob" step="0.01" min="0" max="1">
+      <button onclick="setProb()" class="btn primary">Update</button>
     </section>
   </div>
 
   <script>
     async function loadTickets(){
-      const res = await fetch('/api/admin/tickets');
-      const tickets = await res.json();
-      const tbody = document.querySelector("#ticketsTable tbody");
+      const res = await fetch("/api/admin/tickets");
+      const rows = await res.json();
+      const tbody = document.querySelector("#tickets tbody");
       tbody.innerHTML = "";
-      tickets.forEach(t => {
+      rows.forEach(t => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${t.id}</td>
-          <td>${t.result === "carp" ? "🐟 Carp (WIN)" : "🐟 Bream"}</td>
-          <td>${new Date(t.time).toLocaleString()}</td>
+          <td>${t.email || "Guest"}</td>
+          <td>${t.competition || "-"}</td>
+          <td>${t.result}</td>
+          <td>${t.time}</td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    async function setProb(){
-      const val = parseFloat(document.getElementById("probInput").value);
-      if(isNaN(val) || val < 0 || val > 1) {
-        return alert("Enter a number between 0 and 1");
-      }
-      await fetch('/api/admin/setprob', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({prob: val})
-      });
-      alert("Win probability updated!");
-    }
-
     async function resetTickets(){
-      if(!confirm("Are you sure you want to clear ALL tickets?")) return;
-      const res = await fetch('/api/admin/reset', { method:'POST' });
-      if(res.ok){
-        alert("All tickets cleared!");
-        loadTickets();
-      } else {
-        alert("Error clearing tickets");
-      }
+      if (!confirm("Are you sure you want to reset all tickets?")) return;
+      await fetch("/api/admin/reset", { method: "POST" });
+      loadTickets();
     }
 
-    document.getElementById("setProb").addEventListener("click", setProb);
-    document.getElementById("resetTickets").addEventListener("click", resetTickets);
+    async function setProb(){
+      const prob = parseFloat(document.getElementById("prob").value);
+      if (isNaN(prob) || prob < 0 || prob > 1) {
+        alert("Enter a valid probability between 0 and 1.");
+        return;
+      }
+      await fetch("/api/admin/setprob", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prob })
+      });
+      alert("Win probability updated.");
+    }
 
-    // Load tickets when page opens
     loadTickets();
   </script>
 </body>
