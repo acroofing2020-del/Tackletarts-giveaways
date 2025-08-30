@@ -4,63 +4,116 @@
   <meta charset="UTF-8">
   <title>Competitions - Tackle Tarts</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f8fb; }
-    h1 { color: #004080; }
-    .comp-card {
-      background: #fff;
-      padding: 20px;
-      margin: 15px 0;
-      border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: linear-gradient(135deg, #e0f7fa, #80deea);
+      min-height: 100vh;
     }
-    img { max-width: 100%; border-radius: 8px; }
-    button {
-      padding: 10px 15px;
+    header {
       background: #004080;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-top: 10px;
+      color: white;
+      padding: 15px;
+      text-align: center;
     }
-    button:hover { background: #0066cc; }
-    .result { margin-top: 10px; font-weight: bold; }
+    .container {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transition: transform 0.3s;
+    }
+    .card:hover {
+      transform: scale(1.03);
+    }
+    .card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+    }
+    .card-content {
+      padding: 15px;
+    }
+    h2 {
+      font-size: 1.2em;
+      margin: 0 0 10px;
+      color: #004080;
+    }
+    p {
+      margin: 0 0 10px;
+    }
+    button {
+      background: #004080;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 1em;
+    }
+    button:hover {
+      background: #0066cc;
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      background: #004080;
+      color: white;
+      margin-top: 30px;
+    }
   </style>
 </head>
 <body>
-  <h1>Available Competitions</h1>
-  <div id="competitions"></div>
-  <p><a href="/dashboard.html">📊 My Dashboard</a></p>
+  <header>
+    <h1>🎣 Tackle Tarts Competitions</h1>
+  </header>
+
+  <div class="container" id="competitions"></div>
+
+  <footer>
+    <p>&copy; 2025 Tackle Tarts Giveaways</p>
+  </footer>
 
   <script>
     async function loadCompetitions() {
       const res = await fetch("/api/competitions");
       const comps = await res.json();
+
       const container = document.getElementById("competitions");
       container.innerHTML = "";
-      comps.forEach(comp => {
+
+      comps.forEach(c => {
         const div = document.createElement("div");
-        div.className = "comp-card";
+        div.className = "card";
         div.innerHTML = `
-          <h2>${comp.name}</h2>
-          <p>${comp.description}</p>
-          <img src="${comp.image}" alt="Competition Image">
-          <p>🎟 Max Tickets: ${comp.maxTickets}</p>
-          <button onclick="enter(${comp.id}, this)">Enter</button>
-          <div class="result" id="result-${comp.id}"></div>
+          <img src="${c.image}" alt="${c.name}">
+          <div class="card-content">
+            <h2>${c.name}</h2>
+            <p>${c.description}</p>
+            <p><strong>Tickets Sold:</strong> ${c.soldCount} / ${c.maxTickets}</p>
+            ${c.hasEndWinner ? "<p style='color:green'><strong>Winner Announced!</strong></p>" : ""}
+            <button onclick="enterCompetition(${c.id})">Enter Now</button>
+          </div>
         `;
         container.appendChild(div);
       });
     }
 
-    async function enter(compId, btn) {
-      const res = await fetch("/api/enter/" + compId, { method: "POST" });
-      const data = await res.json();
+    async function enterCompetition(compId) {
+      const res = await fetch(`/api/enter/${compId}`, { method: "POST" });
       if (res.ok) {
-        document.getElementById("result-" + compId).textContent =
-          `✅ You got ticket #${data.ticket.number} (${data.ticket.result})`;
+        const data = await res.json();
+        alert(`✅ Ticket #${data.ticket.number} entered! You got a ${data.ticket.result}`);
       } else {
-        alert("❌ " + data.error);
+        const err = await res.json();
+        alert(`❌ ${err.error}`);
       }
     }
 
