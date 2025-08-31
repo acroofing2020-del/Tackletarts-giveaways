@@ -1,186 +1,156 @@
 const express = require("express");
+const session = require("express-session");
 const bodyParser = require("body-parser");
 const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcryptjs");
-const session = require("express-session");
+const cors = require("cors");
 const path = require("path");
 const Stripe = require("stripe");
 
 const app = express();
-const PORT = process.env.PORT || 10000;
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Middleware
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(
-  session({
-    secret: "supersecretkey",
-    resave: false,
-    saveUninitialized: true,
-  })
-);
+app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Database
-const db = new sqlite3.Database("./database.sqlite", (err) => {
-  if (err) console.error(err);
-  else console.log("Connected to database.");
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "supersecret",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+// ================= DB SETUP =================
+const db = new sqlite3.Database("./database.db", (err) => {
+  if (err) console.error("❌ DB Connection failed:", err);
+  else console.log("✅ Connected to SQLite database");
 });
 
-// Create tables
+// Create tables if they don’t exist
 db.serialize(() => {
   db.run(
     `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE,
       password TEXT,
-      shipping_address TEXT
+      name TEXT,
+      address TEXT
+    )`
+  );
+
+  db.run(
+    `CREATE TABLE IF NOT EXISTS competitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      description TEXT,
+      totalTickets INTEGER,
+      price REAL,
+      instantWins INTEGER DEFAULT 0
     )`
   );
 
   db.run(
     `CREATE TABLE IF NOT EXISTS tickets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      number INTEGER,
-      is_winner INTEGER DEFAULT 0,
-      FOREIGN KEY(user_id) REFERENCES users(id)
+      userId INTEGER,
+      competitionId INTEGER,
+      ticketNumber INTEGER,
+      isWinner INTEGER DEFAULT 0,
+      FOREIGN KEY(userId) REFERENCES users(id),
+      FOREIGN KEY(competitionId) REFERENCES competitions(id)
     )`
   );
 });
 
-// Helpers
-function requireLogin(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).send("Unauthorized");
-  }
-  next();
-}
+// ================= AUTH ROUTES =================
+app.post("/api/signup", (req, res) => {
+  const { email, password, name, address } = req.body;
+  const hashedPassword = bcrypt.hashSync(password, 10);
 
-// Routes
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Signup
-app.post("/api/signup", async (req, res) => {
-  const { email, password, shipping_address } = req.body;
-  const hashed = await bcrypt.hash(password, 10);
   db.run(
-    "INSERT INTO users (email, password, shipping_address) VALUES (?, ?, ?)",
-    [email, hashed, shipping_address],
+    `INSERT INTO users (email, password, name, address) VALUES (?, ?, ?, ?)`,
+    [email, hashedPassword, name, address],
     function (err) {
       if (err) {
-        console.error(err);
-        return res.status(400).send("Email already exists.");
+        return res.status(400).json({ error: "User already exists" });
       }
-      req.session.userId = this.lastID;
-      res.sendStatus(200);
+      res.json({ success: true, userId: this.lastID });
     }
   );
 });
 
-// Login
 app.post("/api/login", (req, res) => {
   const { email, password } = req.body;
-  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
-    if (!user) return res.status(400).send("Invalid credentials.");
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).send("Invalid credentials.");
-    req.session.userId = user.id;
-    res.sendStatus(200);
+  db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, user) => {
+    if (err || !user) return res.status(400).json({ error: "Invalid login" });
+
+    if (bcrypt.compareSync(password, user.password)) {
+      req.session.userId = user.id;
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: "Invalid login" });
+    }
   });
 });
 
-// Checkout session
-app.post("/api/checkout", requireLogin, async (req, res) => {
-  const { quantity } = req.body;
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Raffle Ticket",
-            },
-            unit_amount: 100, // $1 per ticket
-          },
-          quantity,
-        },
-      ],
-      success_url: `${req.protocol}://${req.get("host")}/success`,
-      cancel_url: `${req.protocol}://${req.get("host")}/cancel`,
-    });
-
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error creating checkout session.");
-  }
-});
-
-// Webhook
-app.post(
-  "/webhook",
-  bodyParser.raw({ type: "application/json" }),
-  (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error("Webhook error:", err.message);
-      return res.sendStatus(400);
+// ================= COMPETITIONS =================
+app.post("/api/competitions", (req, res) => {
+  const { title, description, totalTickets, price, instantWins } = req.body;
+  db.run(
+    `INSERT INTO competitions (title, description, totalTickets, price, instantWins) VALUES (?, ?, ?, ?, ?)`,
+    [title, description, totalTickets, price, instantWins || 0],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, competitionId: this.lastID });
     }
-
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      const userId = 1; // TODO: tie back to logged-in user
-
-      // Example: allocate random ticket
-      const ticketNum = Math.floor(Math.random() * 200000) + 1;
-      db.run(
-        "INSERT INTO tickets (user_id, number) VALUES (?, ?)",
-        [userId, ticketNum],
-        (err) => {
-          if (err) console.error("Error adding ticket:", err);
-          else console.log("Ticket assigned:", ticketNum);
-        }
-      );
-    }
-
-    res.json({ received: true });
-  }
-);
-
-// Success / Cancel routes
-app.get("/success", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "success.html"));
+  );
 });
 
-app.get("/cancel", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "cancel.html"));
-});
-
-// Dashboard tickets
-app.get("/api/tickets", requireLogin, (req, res) => {
-  db.all("SELECT * FROM tickets WHERE user_id = ?", [req.session.userId], (err, rows) => {
-    if (err) return res.status(500).send("Error fetching tickets.");
+app.get("/api/competitions", (req, res) => {
+  db.all(`SELECT * FROM competitions`, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// Start server
+// ================= STRIPE CHECKOUT =================
+app.post("/api/checkout", async (req, res) => {
+  const { competitionId, quantity } = req.body;
+
+  db.get(`SELECT * FROM competitions WHERE id = ?`, [competitionId], async (err, comp) => {
+    if (err || !comp) return res.status(400).json({ error: "Competition not found" });
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "gbp",
+              product_data: {
+                name: comp.title,
+              },
+              unit_amount: Math.round(comp.price * 100),
+            },
+            quantity,
+          },
+        ],
+        mode: "payment",
+        success_url: process.env.BASE_URL + "/success.html",
+        cancel_url: process.env.BASE_URL + "/cancel.html",
+      });
+
+      res.json({ id: session.id });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+});
+
+// ================= SERVER START =================
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`Tackle Tarts Giveaway running on port ${PORT}`);
+  console.log(`🎣 Tackle Tarts running on port ${PORT}`);
 });
