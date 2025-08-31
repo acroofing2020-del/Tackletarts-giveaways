@@ -1,38 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Login - Tackle Tarts</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f4f8fb; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
-    .box { background:#fff; padding:24px; border-radius:12px; width:360px; box-shadow:0 4px 12px rgba(0,0,0,.15); }
-    h1 { color:#004080; text-align:center; }
-    input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:8px; }
-    button { width:100%; padding:12px; background:#004080; color:#fff; border:none; border-radius:8px; cursor:pointer; }
-    button:hover { background:#0066cc; }
-    a { color:#004080; text-decoration:none; }
-  </style>
-</head>
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Login</title></head>
 <body>
-  <div class="box">
-    <h1>Login</h1>
-    <input id="email" placeholder="Email" type="email" />
-    <input id="password" placeholder="Password" type="password" />
-    <button onclick="login()">Login</button>
-    <p style="text-align:center;margin-top:10px;">No account? <a href="/signup.html">Sign up</a></p>
-  </div>
-  <script>
-    async function login() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      const res = await fetch("/api/login", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password })
-      });
-      if (res.ok) { window.location.href="/competitions.html"; }
-      else { const d = await res.json(); alert("Login failed: " + (d.message||"")); }
-    }
-  </script>
+  <h2>Login</h2>
+  <input id="email" placeholder="Email"><br>
+  <input id="password" type="password" placeholder="Password"><br>
+  <button onclick="login()">Login</button>
+  <p><a href="/signup.html">Sign up</a></p>
+<script>
+async function login(){
+  const res = await fetch('/api/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      email:document.getElementById('email').value,
+      password:document.getElementById('password').value
+    })
+  });
+  if(res.ok){ location.href='/dashboard.html'; }
+  else{ alert('Login failed'); }
+}
+</script>
 </body>
 </html>
