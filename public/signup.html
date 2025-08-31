@@ -1,52 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Sign Up - Tackle Tarts</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#eef2f3; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
-    .box { background:#fff; padding:24px; border-radius:12px; width:360px; box-shadow:0 4px 12px rgba(0,0,0,.15); }
-    h1 { color:#004080; text-align:center; }
-    input { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:8px; }
-    button { width:100%; padding:12px; background:#004080; color:#fff; border:none; border-radius:8px; cursor:pointer; }
-    button:hover { background:#0066cc; }
-    a { color:#004080; text-decoration:none; }
-  </style>
-</head>
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign Up</title></head>
 <body>
-  <div class="box">
-    <h1>Create Account</h1>
-    <input id="name" placeholder="Full Name" />
-    <input id="email" placeholder="Email" type="email" />
-    <input id="password" placeholder="Password" type="password" />
-    <input id="address1" placeholder="Address line 1" />
-    <input id="address2" placeholder="Address line 2 (optional)" />
-    <input id="city" placeholder="City" />
-    <input id="postcode" placeholder="Postcode" />
-    <input id="country" placeholder="Country" />
-    <button onclick="signup()">Sign Up</button>
-    <p style="text-align:center;margin-top:10px;">Have an account? <a href="/login.html">Login</a></p>
-  </div>
-  <script>
-    async function signup() {
-      const body = {
-        name: document.getElementById("name").value,
-        email: document.getElementById("email").value,
-        password: document.getElementById("password").value,
-        address1: document.getElementById("address1").value,
-        address2: document.getElementById("address2").value,
-        city: document.getElementById("city").value,
-        postcode: document.getElementById("postcode").value,
-        country: document.getElementById("country").value
-      };
-      const res = await fetch("/api/signup", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) { window.location.href="/competitions.html"; }
-      else { const d = await res.json(); alert("Sign up failed: " + (d.message||"")); }
-    }
-  </script>
+  <h2>Sign Up</h2>
+  <input id="name" placeholder="Name"><br>
+  <input id="email" placeholder="Email"><br>
+  <input id="address" placeholder="Shipping Address"><br>
+  <input id="password" type="password" placeholder="Password"><br>
+  <button onclick="signup()">Create account</button>
+  <p><a href="/login.html">Login</a></p>
+<script>
+async function signup(){
+  const res = await fetch('/api/signup',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      name:document.getElementById('name').value,
+      email:document.getElementById('email').value,
+      address:document.getElementById('address').value,
+      password:document.getElementById('password').value
+    })
+  });
+  if(res.ok){ location.href='/dashboard.html'; }
+  else{ alert('Sign up failed'); }
+}
+</script>
 </body>
 </html>
