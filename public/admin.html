@@ -1,115 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Admin - Tackle Tarts</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: linear-gradient(120deg, #d4fc79, #96e6a1);
-      margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      text-align: center;
-      color: #004080;
-    }
-    .form-box, .comp-list {
-      background: #fff;
-      padding: 20px;
-      margin: 20px auto;
-      border-radius: 12px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      width: 90%;
-      max-width: 600px;
-    }
-    input, textarea {
-      width: 95%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-    }
-    button {
-      padding: 12px 20px;
-      background: #004080;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0066cc;
-    }
-    .comp-item {
-      border-bottom: 1px solid #ddd;
-      padding: 10px 0;
-    }
-    .comp-item img {
-      max-width: 100px;
-      border-radius: 8px;
-      margin-right: 10px;
-      vertical-align: middle;
-    }
+    body { font-family: Arial, sans-serif; background:#eef2f3; margin:0; padding:20px; }
+    h1 { text-align:center; color:#004080; }
+    .grid { max-width:1000px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,.1); padding:16px; }
+    input, textarea { width:100%; padding:10px; margin:6px 0; border:1px solid #ccc; border-radius:8px; }
+    button { padding:10px 12px; border:none; border-radius:8px; background:#004080; color:#fff; cursor:pointer; }
+    button:hover { background:#0066cc; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .small { font-size:12px; color:#444; }
+    .list { margin-top:10px; }
   </style>
 </head>
 <body>
   <h1>🎣 Admin Panel</h1>
+  <div class="grid">
 
-  <div class="form-box">
-    <h2>Create Competition</h2>
-    <input id="name" placeholder="Competition Name">
-    <textarea id="description" placeholder="Description"></textarea>
-    <input id="image" placeholder="Image URL">
-    <input id="maxTickets" type="number" placeholder="Max Tickets (e.g. 200000)">
-    <button onclick="createCompetition()">Create</button>
-  </div>
+    <div class="card">
+      <h2>Create Competition</h2>
+      <input id="c_name" placeholder="Name" />
+      <textarea id="c_desc" placeholder="Description"></textarea>
+      <input id="c_img" placeholder="Image URL" />
+      <input id="c_max" type="number" placeholder="Max tickets (default 200000)" />
+      <button onclick="createComp()">Create</button>
+    </div>
 
-  <div class="comp-list">
-    <h2>All Competitions</h2>
-    <div id="competitions"></div>
+    <div class="card">
+      <h2>Add Instant-Win Numbers (Carp)</h2>
+      <div class="row">
+        <input id="iw_comp" type="number" placeholder="Competition ID" />
+        <input id="iw_nums" placeholder="Comma numbers e.g. 7,22,305" />
+      </div>
+      <button onclick="addInstantWins()">Add Instant Wins</button>
+      <p class="small">These ticket numbers will count as instant wins if owned.</p>
+    </div>
+
+    <div class="card">
+      <h2>Grant Site Credit to User</h2>
+      <div class="row">
+        <input id="g_email" placeholder="User email" />
+        <input id="g_amount" type="number" placeholder="Amount in cents (e.g. 500)" />
+      </div>
+      <button onclick="grantCredit()">Grant Credit</button>
+    </div>
+
+    <div class="card">
+      <h2>Assign FREE Tickets to User</h2>
+      <div class="row">
+        <input id="f_email" placeholder="User email" />
+        <input id="f_comp" type="number" placeholder="Competition ID" />
+      </div>
+      <input id="f_nums" placeholder="Comma numbers e.g. 1,2,3" />
+      <button onclick="assignFree()">Assign Free Tickets</button>
+    </div>
+
+    <div class="card">
+      <h2>Edit Ticket Result</h2>
+      <div class="row">
+        <input id="e_comp" type="number" placeholder="Competition ID" />
+        <input id="e_num" type="number" placeholder="Ticket number" />
+      </div>
+      <input id="e_result" placeholder="Result: bream | carp | winner" />
+      <button onclick="editTicket()">Save Ticket Result</button>
+    </div>
+
+    <div class="card">
+      <h2>End Competition (Random Final Winner)</h2>
+      <input id="end_comp" type="number" placeholder="Competition ID" />
+      <button onclick="endComp()">End Draw</button>
+      <div id="end_out" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h2>All Competitions</h2>
+      <div id="list" class="list"></div>
+    </div>
+
   </div>
 
   <script>
-    async function createCompetition() {
-      const name = document.getElementById("name").value;
-      const description = document.getElementById("description").value;
-      const image = document.getElementById("image").value;
-      const maxTickets = parseInt(document.getElementById("maxTickets").value);
-
-      const res = await fetch("/api/admin/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, image, maxTickets })
-      });
-
-      if (res.ok) {
-        alert("✅ Competition created!");
-        loadCompetitions();
-      } else {
-        alert("❌ Failed to create competition");
-      }
+    async function createComp() {
+      const body = {
+        name: document.getElementById("c_name").value,
+        description: document.getElementById("c_desc").value,
+        image: document.getElementById("c_img").value,
+        maxTickets: document.getElementById("c_max").value
+      };
+      const res = await fetch("/api/admin/competitions", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
+      alert(res.ok ? "✅ Competition created" : "❌ Failed");
+      load();
     }
 
-    async function loadCompetitions() {
+    async function addInstantWins() {
+      const id = document.getElementById("iw_comp").value;
+      const nums = document.getElementById("iw_nums").value.split(",").map(s => s.trim()).filter(Boolean);
+      const res = await fetch(`/api/admin/competitions/${id}/add-instant-wins`, {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ numbers: nums })
+      });
+      const d = await res.json();
+      alert(res.ok ? `✅ Instant wins now: ${d.instantWinsCount}` : "❌ Failed");
+    }
+
+    async function grantCredit() {
+      const email = document.getElementById("g_email").value;
+      const amountCents = parseInt(document.getElementById("g_amount").value, 10);
+      const res = await fetch("/api/admin/credit/grant", {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email, amountCents })
+      });
+      const d = await res.json();
+      alert(res.ok ? `✅ New credit: £${(d.creditCents/100).toFixed(2)}` : (d.message||"❌ Failed"));
+    }
+
+    async function assignFree() {
+      const email = document.getElementById("f_email").value;
+      const compId = document.getElementById("f_comp").value;
+      const numbers = document.getElementById("f_nums").value.split(",").map(s => s.trim()).filter(Boolean);
+      const res = await fetch("/api/admin/tickets/assign-free", {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email, compId, numbers })
+      });
+      const d = await res.json();
+      alert(res.ok ? `✅ Assigned: ${d.assigned.join(", ")}` : (d.message||"❌ Failed"));
+      load();
+    }
+
+    async function editTicket() {
+      const compId = document.getElementById("e_comp").value;
+      const number = document.getElementById("e_num").value;
+      const result = document.getElementById("e_result").value.trim();
+      const res = await fetch("/api/admin/tickets/edit", {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ compId, number, result })
+      });
+      const d = await res.json();
+      alert(res.ok ? "✅ Ticket updated" : (d.message||"❌ Failed"));
+    }
+
+    async function endComp() {
+      const id = document.getElementById("end_comp").value;
+      const res = await fetch(`/api/admin/end/${id}`, { method:"POST" });
+      const d = await res.json();
+      const out = document.getElementById("end_out");
+      if (res.ok) out.innerText = `🏆 Winner: ${d.winner.email} • Ticket #${d.winner.number}`;
+      else out.innerText = d.message || "Failed";
+      load();
+    }
+
+    async function load() {
       const res = await fetch("/api/competitions");
       const comps = await res.json();
-      const container = document.getElementById("competitions");
-      container.innerHTML = "";
-      comps.forEach(c => {
-        const div = document.createElement("div");
-        div.className = "comp-item";
-        div.innerHTML = `
-          <img src="${c.image}" alt="comp">
-          <strong>${c.name}</strong><br>
-          ${c.description}<br>
-          🎟️ ${c.soldCount}/${c.maxTickets} tickets sold
-        `;
-        container.appendChild(div);
-      });
+      const list = document.getElementById("list");
+      list.innerHTML = comps.map(c => `
+        <div style="margin:6px 0;">
+          <strong>#${c.id} ${c.name}</strong> — ${c.soldCount}/${c.maxTickets} sold ${c.ended ? "• ENDED" : ""}
+        </div>
+      `).join("");
     }
 
-    loadCompetitions();
+    load();
   </script>
 </body>
 </html>
