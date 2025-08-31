@@ -1,101 +1,58 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Competitions - Tackle Tarts</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f4f8fb; margin:0; padding:20px; }
-    h1 { text-align:center; color:#004080; }
-    .top { max-width:900px; margin:0 auto 20px; display:flex; justify-content:space-between; align-items:center; }
-    .me { font-size:14px; color:#333; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; max-width:1100px; margin: 0 auto; }
-    .card { background:#fff; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,.1); padding:16px; text-align:center; }
-    .card img { max-width:100%; border-radius:10px; margin-bottom:10px; }
-    .qty { margin:8px 0; }
-    input[type="range"] { width:100%; }
-    button { padding:10px 12px; border:none; border-radius:8px; background:#004080; color:#fff; cursor:pointer; }
-    button:hover { background:#0066cc; }
-    .secondary { background:#2e7d32; } .secondary:hover { background:#1b5e20; }
-  </style>
-</head>
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Competitions</title></head>
 <body>
-  <h1>🎣 Active Competitions</h1>
-  <div class="top">
-    <div class="me" id="meBox"></div>
-    <div><a href="/dashboard.html">My Dashboard</a> | <a href="/admin.html">Admin</a></div>
+  <h2>Open Competitions</h2>
+  <div id="list"></div>
+  <hr>
+  <div>
+    <label>Quantity (tickets @ £0.25 each):</label>
+    <input id="qty" type="range" min="1" max="1000" value="1" oninput="qv.innerText=this.value">
+    <b id="qv">1</b>
+    <div>Total: £<span id="total">0.25</span></div>
+    <button id="buyBtn" disabled>Buy</button>
   </div>
-  <div id="grid" class="grid"></div>
 
-  <script>
-    let me = null;
+<script>
+let currentComp = null;
+const qtyEl = document.getElementById('qty');
+const totalEl = document.getElementById('total');
+qtyEl.addEventListener('input', ()=> {
+  totalEl.textContent = (qtyEl.value * 0.25).toFixed(2);
+});
 
-    async function loadMe() {
-      const res = await fetch("/api/me");
-      if (res.ok) {
-        me = await res.json();
-        document.getElementById("meBox").innerText =
-          `Logged in: ${me.email} • Credit: £${(me.creditCents/100).toFixed(2)}`;
-      } else {
-        document.getElementById("meBox").innerHTML = 'Not logged in. <a href="/login.html">Login</a>';
-      }
-    }
+async function loadComps(){
+  const r = await fetch('/api/competitions');
+  const comps = await r.json();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  comps.forEach(c=>{
+    const d = document.createElement('div');
+    d.style.margin='12px 0';
+    d.innerHTML = `<b>${c.title}</b> — ${c.description || ''}<br>
+      Tickets: ${c.total_tickets} • Instant wins: ${c.instant_win_count}`;
+    d.onclick = () => selectComp(c);
+    list.appendChild(d);
+  });
+}
+function selectComp(c){
+  currentComp = c;
+  document.getElementById('buyBtn').disabled = false;
+}
+document.getElementById('buyBtn').onclick = async () => {
+  if(!currentComp) return alert('Pick a competition first');
+  const quantity = parseInt(qtyEl.value,10);
+  const res = await fetch('/api/checkout',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ competitionId: currentComp.id, quantity })
+  });
+  const data = await res.json();
+  if(data.url) location.href = data.url;
+  else alert('Checkout error');
+};
 
-    async function loadComps() {
-      const res = await fetch("/api/competitions");
-      const comps = await res.json();
-      const grid = document.getElementById("grid");
-      grid.innerHTML = "";
-      comps.forEach(c => {
-        const id = `qty_${c.id}`;
-        const wrap = document.createElement("div");
-        wrap.className = "card";
-        wrap.innerHTML = `
-          <img src="${c.image}" alt="${c.name}" />
-          <h2>${c.name}</h2>
-          <p>${c.description}</p>
-          <p><strong>${c.soldCount}</strong> / ${c.maxTickets} sold</p>
-          <div class="qty">
-            <label>Tickets: <span id="val_${c.id}">1</span></label>
-            <input id="${id}" type="range" min="1" max="50" value="1" oninput="document.getElementById('val_${c.id}').innerText=this.value">
-          </div>
-          <div style="display:flex; gap:8px; justify-content:center;">
-            <button onclick="buy(${c.id})">Pay with Card</button>
-            <button class="secondary" onclick="buyCredit(${c.id})">Use Credit</button>
-          </div>
-        `;
-        grid.appendChild(wrap);
-      });
-    }
-
-    async function buy(compId) {
-      const qty = parseInt(document.getElementById(`qty_${compId}`).value, 10);
-      const res = await fetch(`/api/checkout/${compId}`, {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ quantity: qty })
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else alert(data.message || "Payment failed");
-    }
-
-    async function buyCredit(compId) {
-      const qty = parseInt(document.getElementById(`qty_${compId}`).value, 10);
-      const res = await fetch(`/api/credit/buy/${compId}`, {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ quantity: qty })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`✅ Issued ${data.issued.length} ticket(s). New credit: £${(data.creditCents/100).toFixed(2)}`);
-      } else {
-        alert(data.message || "Not enough credit");
-      }
-    }
-
-    loadMe();
-    loadComps();
-  </script>
+loadComps();
+</script>
 </body>
 </html>
